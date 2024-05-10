@@ -43,8 +43,8 @@ int main(int argc, char** argv)
 	string nome=argv[1];
 	if(argc<3)
 	{
-		infolder="./"
-		outfolder="OutDir/"
+		infolder="./";
+		outfolder="OutDir/";
 	}
 	else
 	{
