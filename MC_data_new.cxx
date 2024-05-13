@@ -112,9 +112,14 @@ int main(int argc, char** argv)
 		cout<<filename<<endl;
 		bool ends= false;
 		if (ending.size() <= filename.size())    ends=equal(ending.rbegin(), ending.rend(), filename.rbegin());
-		cout<<ends<<endl;
+        
+        //DEBUG
+		if(!ends) cout<<"Not ending with "<<ending<<endl;
+        else cout<<filename<<" is ending with "<<ending<<"!"<<endl;
+        
 		//if(filename.ends_with(".root"))   //c++20 fix it wtf
 		//{
+        
 		if(ends)
 		{
 			z_ini=0.;
