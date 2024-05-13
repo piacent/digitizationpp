@@ -1,5 +1,5 @@
-//compiling it seems I need -lstdc++fs
 //CALL: ./progname.exe Configfile -I inputdir -O outputdir
+
 #include <iostream>
 #include <fstream>
 #include <chrono>
@@ -10,7 +10,7 @@
 #include <cmath>
 #include <stdio.h>
 #include <cstdlib>
-#include <experimental/filesystem>
+#include <filesystem>
 #include <memory>
 #include "TRandom3.h"
 #include "TFile.h"
@@ -43,8 +43,8 @@ int main(int argc, char** argv)
 	string nome=argv[1];
 	if(argc<3)
 	{
-		infolder="./";
-		outfolder="OutDir/";
+		infolder="../";
+		outfolder="../OutDir/";
 	}
 	else
 	{
@@ -59,6 +59,10 @@ int main(int argc, char** argv)
 		else {infolder=argv[5]; outfolder=argv[3];}
 	}
 	
+    // DEBUG
+    cout<<"Input Folder: "<<infolder<<endl;
+    cout<<"Output Folder: "<<outfolder<<endl;
+    
 	map<string,string> options;
 	ReadConfig(nome,options);						//Function to be checked
 	
@@ -95,10 +99,14 @@ int main(int argc, char** argv)
     vector<float> theta_ini;
     vector<float> phi_ini;
     
-    if(! experimental::filesystem::exists(outfolder)) system(("mkdir " + outfolder).c_str() );
+    if(! filesystem::exists(outfolder)){
+        //DEBUG
+        cout<<"Creating oufolder..."<<
+        system(("mkdir " + outfolder).c_str() );
+    }
     
     string ending=".root";
-    for(const auto& entry : experimental::filesystem::directory_iterator(infolder))
+    for(const auto& entry : filesystem::directory_iterator(infolder))
     {
 		string filename=entry.path();
 		cout<<filename<<endl;
