@@ -41,11 +41,12 @@
 'camera_aperture'       : 0.95,
 
 'bckg'                  : True,      # if 'True' background is added
+'NR'                    : False,     # 'True' for NR digitization, 'False' for ER   
 'rootfiles'             : True,      # choose input type: True for G4 root iput, False for SRIM txt files
 'events'                : 3,         # number of events to be processed, -1 = all
 'donotremove'           : True,      # Remove or not the file from the tmp folder
 'fixed_seed'            : False,     # If 'True' the seed of random distributions is set to 0 (for debugging purposes)
 
-'Vignetting'		: True,      #Add vignetting effect according to the MAP
+'Vignetting'		: False,      #Add vignetting effect according to the MAP
 'Vig_Map'		: 'vignette_run04117.root',
 }

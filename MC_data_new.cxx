@@ -44,7 +44,7 @@ int main(int argc, char** argv)
 	string nome=argv[1];
 	if(argc<3)
 	{
-		infolder="../input/other/";
+		infolder="../input/";
 		outfolder="../OutDir/";
 	}
 	else
@@ -121,19 +121,19 @@ int main(int argc, char** argv)
 		//if(filename.ends_with(".root"))   //c++20 fix it wtf
 		//{
         
-		if(ends) {
-			z_ini=0.;
-			
+        if(ends) {
+            z_ini=0.;
+            
             auto f         = unique_ptr<TFile> {TFile::Open(filename.c_str())};
             auto inputtree = (TTree*)f->Get("nTuple");
-			
-			string fileoutname= Form("histogram_Runs%05d_MC.root",runcount);
-			auto outfile= shared_ptr<TFile> {TFile::Open(Form("%s/%s",
+            
+            string fileoutname= Form("histogram_Runs%05d_MC.root",runcount);
+            auto outfile = shared_ptr<TFile> {TFile::Open(Form("%s/%s",
                                                               outfolder.c_str(),
                                                               fileoutname.c_str()),
                                                          "RECREATE") };
-			outfile->mkdir("event_info");
-			SaveValues(options,outfile);
+            outfile->mkdir("event_info");
+            SaveValues(options,outfile);
             
             // Input file branches
             Int_t eventnumber;
@@ -141,41 +141,88 @@ int main(int argc, char** argv)
             Double_t energyDep;
             Double_t energyDep_NR;
             Int_t particle_type;
-            vector<int>    pdgID_hits;
-            vector<double> tracklen_hits;
-            vector<double> px_particle;
-            vector<double> py_particle;
-            vector<double> pz_particle;
-            vector<double> energyDep_hits;
-            vector<double> x_hits;
-            vector<double> y_hits;
-            vector<double> z_hits;
+            vector<int>    *pdgID_hits = 0;
+            vector<double> *tracklen_hits = 0;
+            vector<double> *px_particle = 0;
+            vector<double> *py_particle = 0;
+            vector<double> *pz_particle = 0;
+            vector<double> *energyDep_hits = 0;
+            vector<double> *x_hits = 0;
+            vector<double> *y_hits = 0;
+            vector<double> *z_hits = 0;
+            
+            // Some of the following variables not present in (old?) NR simulations???
+            inputtree->SetBranchAddress("eventnumber", &eventnumber);
+            inputtree->SetBranchAddress("numhits", &numhits);
+            inputtree->SetBranchAddress("energyDep", &energyDep);
+            inputtree->SetBranchAddress("energyDep_NR", &energyDep_NR);
+            inputtree->SetBranchAddress("pdgID_hits", &pdgID_hits);
+            inputtree->SetBranchAddress("tracklen_hits", &tracklen_hits);
+            inputtree->SetBranchAddress("px_particle", &px_particle);
+            inputtree->SetBranchAddress("py_particle", &py_particle);
+            inputtree->SetBranchAddress("pz_particle", &pz_particle);
+            inputtree->SetBranchAddress("x_hits", &x_hits);
+            inputtree->SetBranchAddress("y_hits", &y_hits);
+            inputtree->SetBranchAddress("z_hits", &z_hits);
+            
+            if(options["NR"]=="True") {
+                inputtree->SetBranchAddress("particle_type", &particle_type);
+            }
+            
             
             //Output file branches
-            int eventnumber_out;
-            int particle_type_out;
-            float energy;
-            float theta;
-            float phi;
-            float track_length_3D;
-            float x_vertex;
-            float y_vertex;
-            float z_vertex;
-            float x_vertex_end;
-            float y_vertex_end;
-            float z_vertex_end;
-            float x_min;
-            float x_max;
-            float y_min;
-            float y_max;
-            float z_min;
-            float z_max;
-            float px;
-            float py;
-            float pz;
-            float proj_track_2D;
-            float nhits_og;
-            float N_photons;
+            Int_t eventnumber_out   = -999;
+            Int_t particle_type_out = -999;
+            Float_t energy = -999;
+            Float_t theta  = -999;
+            Float_t phi    = -999;
+            Float_t track_length_3D = -1;
+            Float_t x_vertex = -1;
+            Float_t y_vertex = -1;
+            Float_t z_vertex = -1;
+            Float_t x_vertex_end = -1;
+            Float_t y_vertex_end = -1;
+            Float_t z_vertex_end = -1;
+            Float_t x_min = -1;
+            Float_t x_max = -1;
+            Float_t y_min = -1;
+            Float_t y_max = -1;
+            Float_t z_min = -1;
+            Float_t z_max = -1;
+            Float_t px = -1;
+            Float_t py = -1;
+            Float_t pz = -1;
+            Float_t proj_track_2D = -1;
+            Int_t nhits_og = -1;
+            Int_t N_photons = -1;
+            
+            auto outtree = new TTree("event_info", "event_info");
+            
+            outtree->Branch("eventnumber", &eventnumber_out, "eventnumber/I");
+            outtree->Branch("particle_type", &particle_type_out, "particle_type/I");
+            outtree->Branch("energy", &energy, "energy/F");
+            outtree->Branch("theta", &theta, "theta/F");
+            outtree->Branch("phi", &phi, "phi/F");
+            outtree->Branch("track_length_3D", &track_length_3D, "track_length_3D/F");
+            outtree->Branch("proj_track_2D", &proj_track_2D, "proj_track_2D/F");
+            outtree->Branch("x_vertex", &x_vertex, "x_vertex/F");
+            outtree->Branch("y_vertex", &y_vertex, "y_vertex/F");
+            outtree->Branch("z_vertex", &z_vertex, "z_vertex/F");
+            outtree->Branch("x_vertex_end", &x_vertex_end, "x_vertex_end/F");
+            outtree->Branch("y_vertex_end", &y_vertex_end, "y_vertex_end/F");
+            outtree->Branch("z_vertex_end", &z_vertex_end, "z_vertex_end/F");
+            outtree->Branch("x_min", &x_min, "x_min/F");
+            outtree->Branch("x_max", &x_max, "x_max/F");
+            outtree->Branch("y_min", &y_min, "y_min/F");
+            outtree->Branch("y_max", &y_max, "y_max/F");
+            outtree->Branch("z_min", &z_min, "z_min/F");
+            outtree->Branch("z_max", &z_max, "z_max/F");
+            outtree->Branch("N_photons", &N_photons, "N_photons/I");
+            outtree->Branch("px", &px, "px/F");
+            outtree->Branch("py", &py, "py/F");
+            outtree->Branch("pz", &pz, "pz/F");
+            outtree->Branch("nhits_og", &nhits_og, "nhits_og/I");
+            
 			
             int max_events = inputtree->GetEntries();
             int totev = (stod(options["events"])==-1) ? max_events : stod(options["events"]);
@@ -200,6 +247,28 @@ int main(int argc, char** argv)
             
             //DEBUG
             //cout<<"DEBUG: "<<VignMap->GetBinContent(0,0)<<endl;
+            
+            for(int entry=0; entry<totev; entry++) {  // RUNNING ON ENTRIES
+                
+                inputtree->GetEntry(entry);
+                
+                //DEBUG
+                //if(options["NR"]=="True") cout<<particle_type<<endl;
+                //if (entry==0) {
+                //    cout<<numhits<<" - "<<pdgID_hits->size()<<endl;
+                //    for(unsigned int i=0; i<pdgID_hits->size(); i++) {
+                //        cout<<"---"<< (*pdgID_hits)[i] <<endl;
+                //    }
+                //}
+                
+                //cout<<eventnumber<<endl;
+                eventnumber_out = eventnumber;
+                //cout<<eventnumber_out<<endl;
+                
+                outtree->Fill();
+            }
+            gDirectory->cd("event_info");
+            outtree->Write();
             
             
 			f->Close();
