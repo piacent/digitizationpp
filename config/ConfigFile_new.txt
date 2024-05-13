@@ -46,6 +46,6 @@
 'donotremove'           : True,      # Remove or not the file from the tmp folder
 'fixed_seed'            : False,     # If 'True' the seed of random distributions is set to 0 (for debugging purposes)
 
-'Vignetting'		: False,      #Add vignetting effect according to the MAP
-'Vig_Map'		: "vignette_run04117.root",
+'Vignetting'		: True,      #Add vignetting effect according to the MAP
+'Vig_Map'		: 'vignette_run04117.root',
 }

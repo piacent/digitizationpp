@@ -16,6 +16,7 @@
 #include "TFile.h"
 #include "TTree.h"
 #include "TH1.h"
+#include "TH2.h"
 
 using namespace std;
 
@@ -123,7 +124,7 @@ int main(int argc, char** argv)
 		if(ends) {
 			z_ini=0.;
 			
-            auto f         = shared_ptr<TFile> {TFile::Open(filename.c_str())};
+            auto f         = unique_ptr<TFile> {TFile::Open(filename.c_str())};
             auto inputtree = (TTree*)f->Get("nTuple");
 			
 			string fileoutname= Form("histogram_Runs%05d_MC.root",runcount);
@@ -182,11 +183,29 @@ int main(int argc, char** argv)
             
             // DEBUG
             //cout<<max_events<<" - "<<totev<<endl;
-			
-			
+            
+            unique_ptr<TH2D> VignMap;
+            if(options["Vignetting"]=="True") {
+                string vignfilename = Form("../VignettingMap/%s", options["Vig_Map"].c_str());
+                cout<<"Opening "<<vignfilename<<"..."<<endl;
+                auto VignFile = unique_ptr<TFile> {TFile::Open(vignfilename.c_str())};
+                
+                VignMap = std::make_unique<TH2D>(*(TH2D*)VignFile->Get("normmap_lime"));
+                
+                VignMap->Smooth();
+                
+                VignMap->SetDirectory(0); // To keep object in memory outside scope
+                VignFile->Close();
+            }
+            
+            //DEBUG
+            //cout<<"DEBUG: "<<VignMap->GetBinContent(0,0)<<endl;
+            
+            
 			f->Close();
             outfile->Close();
 		}
+        
 	} 
 	
 	
@@ -234,7 +253,7 @@ int NelGEM2(vector<double> energyDep,const vector<double>& z_hit, map<string,str
 	vector<double> n_ioniz_el_mean(n_ioniz_el.size(),0);
     
 	double optabsorption_l=stod(options["absorption_l"]);
-	for(int i=0;i<n_ioniz_el_mean.size();i++) n_ioniz_el_mean[i]=abs(n_ioniz_el[i]*exp(-drift_l[i]/optabsorption_l));
+	for(unsigned int i=0;i<n_ioniz_el_mean.size();i++) n_ioniz_el_mean[i]=abs(n_ioniz_el[i]*exp(-drift_l[i]/optabsorption_l));
 	
 	
 	return 0;
