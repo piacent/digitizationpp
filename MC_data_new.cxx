@@ -43,7 +43,7 @@ int main(int argc, char** argv)
 	string nome=argv[1];
 	if(argc<3)
 	{
-		infolder="../";
+		infolder="../input/other/";
 		outfolder="../OutDir/";
 	}
 	else
@@ -120,27 +120,72 @@ int main(int argc, char** argv)
 		//if(filename.ends_with(".root"))   //c++20 fix it wtf
 		//{
         
-		if(ends)
-		{
+		if(ends) {
 			z_ini=0.;
-			//int zbins= int(stod(options["zcloud"])/stod(options["z_vox_dim"]));   //line disappeared on original python script?
-			auto f= unique_ptr<TFile> {TFile::Open(filename.c_str()) };
-			auto inputtree = unique_ptr<TTree> {(TTree*)f->Get("nTuple")};
-			string pathread=Form("/media/giorgio/DATA/Giorgio/Documenti/Uni/Dottorato/Lavoro/Saturation_Mango_Sim/%s/%s:/",infolder.c_str(),filename.c_str());
+			
+            auto f         = shared_ptr<TFile> {TFile::Open(filename.c_str())};
+            auto inputtree = (TTree*)f->Get("nTuple");
+			
 			string fileoutname= Form("histogram_Runs%05d_MC.root",runcount);
-			string pathwrite=Form("/media/giorgio/DATA/Giorgio/Documenti/Uni/Dottorato/Lavoro/Saturation_Mango_Sim/digitization/%s/%s:/",outfolder.c_str(),fileoutname.c_str());
-			
-			auto outfile= shared_ptr<TFile> {TFile::Open(Form("%s/%s",outfolder.c_str(),fileoutname.c_str()),"RECREATE") };
+			auto outfile= shared_ptr<TFile> {TFile::Open(Form("%s/%s",
+                                                              outfolder.c_str(),
+                                                              fileoutname.c_str()),
+                                                         "RECREATE") };
 			outfile->mkdir("event_info");
-			SaveValues(options,outfile);				//To be checked
+			SaveValues(options,outfile);
+            
+            // Input file branches
+            Int_t eventnumber;
+            Int_t numhits;
+            Double_t energyDep;
+            Double_t energyDep_NR;
+            Int_t particle_type;
+            vector<int>    pdgID_hits;
+            vector<double> tracklen_hits;
+            vector<double> px_particle;
+            vector<double> py_particle;
+            vector<double> pz_particle;
+            vector<double> energyDep_hits;
+            vector<double> x_hits;
+            vector<double> y_hits;
+            vector<double> z_hits;
+            
+            //Output file branches
+            int eventnumber_out;
+            int particle_type_out;
+            float energy;
+            float theta;
+            float phi;
+            float track_length_3D;
+            float x_vertex;
+            float y_vertex;
+            float z_vertex;
+            float x_vertex_end;
+            float y_vertex_end;
+            float z_vertex_end;
+            float x_min;
+            float x_max;
+            float y_min;
+            float y_max;
+            float z_min;
+            float z_max;
+            float px;
+            float py;
+            float pz;
+            float proj_track_2D;
+            float nhits_og;
+            float N_photons;
 			
-			
-			
-			
-			
+            int max_events = inputtree->GetEntries();
+            int totev = (stod(options["events"])==-1) ? max_events : stod(options["events"]);
+            totev = min(totev, max_events);
+            
+            // DEBUG
+            //cout<<max_events<<" - "<<totev<<endl;
 			
 			
 			f->Close();
+            outfile->Close();
 		}
 	} 
 	
@@ -171,7 +216,6 @@ void ReadConfig(string name, map<string,string>& options)
 		if(delim2==string::npos) delim2=line.size();
 		auto index= line.substr(0,delim1);
 		auto val= line.substr(delim1+1,min(delim2,line.size())-delim1-1 );
-		//cout<<index <<"   " << val << endl;
 		options[index]=val;
 	}
 	
@@ -182,10 +226,13 @@ int NelGEM2(vector<double> energyDep,const vector<double>& z_hit, map<string,str
 	vector<double> n_ioniz_el;
 	double opt_pot=stod(options["ion_pot"]);
 	transform(energyDep.begin(),energyDep.end(),back_inserter(n_ioniz_el), [&] (double a) { return a/opt_pot;});
+    
 	vector<double> drift_l;
 	int opt_gem=stoi(options["z_gem"]);
-	transform(z_hit.begin(),z_hit.end(),back_inserter(drift_l), [&] (double a) { return abs(a-opt_gem);}); 
+	transform(z_hit.begin(),z_hit.end(),back_inserter(drift_l), [&] (double a) { return abs(a-opt_gem);});
+    
 	vector<double> n_ioniz_el_mean(n_ioniz_el.size(),0);
+    
 	double optabsorption_l=stod(options["absorption_l"]);
 	for(int i=0;i<n_ioniz_el_mean.size();i++) n_ioniz_el_mean[i]=abs(n_ioniz_el[i]*exp(-drift_l[i]/optabsorption_l));
 	
@@ -200,10 +247,15 @@ void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile)
 	gDirectory->cd("param_dir");
 	for(auto const& [key, val] : options)
 	{
-		if(key!="tag")
+		if(key!="tag" and key !="Vig_Map")
 		{
 			TH1F h(string(key).c_str(),"",1,0,1);
-			double value=stod(val);
+            
+            double value;
+            if(val == "True")       value = 1.;
+            else if(val == "False") value = 0.;
+            else                   value  = stod(val);
+            
 			h.SetBinContent(1,value);
 			h.Write();
 		}
