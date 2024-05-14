@@ -36,3 +36,4 @@ debug
 OutDir
 *.DS_Store
 input/other
+tmp

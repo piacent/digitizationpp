@@ -17,6 +17,8 @@
 #include "TTree.h"
 #include "TH1.h"
 #include "TH2.h"
+#include "s3.h"
+#include "cygnolib.h"
 
 using namespace std;
 
@@ -35,6 +37,13 @@ int z_ini = 0;
 void ReadConfig(string name, map<string,string>& options);
 void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile);
 int NelGEM2(const vector<double>& energyDep,const vector<double>& z_hit, map<string,string>& options);
+
+// WIP
+void AddBckg(map<string,string>& options, int entry, TH2F& background);
+
+// Old approach
+//string rootlocation(string tag, int run);   // inconsistency for the MC-old tag!!!
+//string root_filename(string tag, int run);
 
 int main(int argc, char** argv)
 {
@@ -232,13 +241,13 @@ int main(int argc, char** argv)
             // DEBUG
             //cout<<max_events<<" - "<<totev<<endl;
             
-            unique_ptr<TH2D> VignMap;
+            unique_ptr<TH2F> VignMap;
             if(options["Vignetting"]=="True") {
                 string vignfilename = Form("../VignettingMap/%s", options["Vig_Map"].c_str());
                 cout<<"Opening "<<vignfilename<<"..."<<endl;
                 auto VignFile = unique_ptr<TFile> {TFile::Open(vignfilename.c_str())};
                 
-                VignMap = std::make_unique<TH2D>(*(TH2D*)VignFile->Get("normmap_lime"));
+                VignMap = std::make_unique<TH2F>(*(TH2F*)VignFile->Get("normmap_lime"));
                 
                 VignMap->Smooth();
                 
@@ -265,10 +274,31 @@ int main(int argc, char** argv)
                 cout<<"Entry "<<entry<<" of "<<totev<<endl;
                 cout<<"Energy "<<energyDep<<" keV"<<endl;
                 
+                if (energyDep>200) {
+                    continue;
+                }
+                
+                TH2F background;
+                
+                AddBckg(options, entry, background);
+                
+                // Debug
+                // cout<<"=================="<<endl;
+                // cout<<background.GetBinContent(0, 0)<<" "<<background.GetBinContent(0, 1)<<endl;
+                // cout<<background.GetBinContent(1, 0)<<" "<<background.GetBinContent(1, 1)<<endl;
+                // cout<<"=================="<<endl;
+                
+                
                 
                 eventnumber_out = eventnumber;
                 
                 outtree->Fill();
+                
+                gDirectory->cd();
+                
+                // DEBUG
+                //background.Write();
+                
             }
             gDirectory->cd("event_info");
             outtree->Write();
@@ -320,7 +350,7 @@ int NelGEM2(vector<double> energyDep,const vector<double>& z_hit, map<string,str
     transform(energyDep.begin(),energyDep.end(),back_inserter(n_ioniz_el), [&] (double a) { return a/opt_pot;});
     
     vector<double> drift_l;
-    int opt_gem=stoi(options["z_gem"]);
+    int opt_gem=stod(options["z_gem"]);
     transform(z_hit.begin(),z_hit.end(),back_inserter(drift_l), [&] (double a) { return abs(a-opt_gem);});
     
     vector<double> n_ioniz_el_mean(n_ioniz_el.size(),0);
@@ -339,7 +369,11 @@ void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile)
     gDirectory->cd("param_dir");
     for(auto const& [key, val] : options)
     {
-        if(key!="tag" and key !="Vig_Map")
+        // DEBUG
+        // cout<<key<<": "<<val<<endl;
+        
+        if(key!="tag"       and key !="Vig_Map" and
+           key!="bckg_path" and key !="ped_cloud_dir")
         {
             TH1F h(string(key).c_str(),"",1,0,1);
             
@@ -355,3 +389,142 @@ void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile)
     outfile->cd();
     return;
 }
+
+
+//WIP
+void AddBckg(map<string,string>& options, int entry, TH2F& background) {
+    
+    string tmpfolder = options["bckg_path"];
+    int x_pix = stoi(options["x_pix"]);
+    int y_pix = stoi(options["y_pix"]);
+    
+    
+    if(! filesystem::exists(tmpfolder)){
+        //DEBUG
+        cout<<"Creating tmpfolder..."<<
+        system(("mkdir " + tmpfolder).c_str() );
+    }
+    
+    
+    if(options["bckg"]=="True") {
+        
+        string tmpname = Form( "%s/run%05d.mid.gz", tmpfolder.c_str(), stoi(options["noiserun"]));
+        
+        
+        if(! filesystem::exists(tmpname)) {
+            // DEBUG
+            cout << "Looking for file: "<<tmpname<<endl;
+            bool debug   = true;
+            bool verbose = false;
+            bool cloud   = true;
+            
+            int run = stoi(options["noiserun"]);
+            
+            //Download or find midas file
+            string filename = s3::cache_file(s3::mid_file(run, options["ped_cloud_dir"], cloud, verbose),
+                                             options["bckg_path"],
+                                             cloud,
+                                             options["ped_cloud_dir"],
+                                             verbose);
+        }
+        
+        int pic_index = gRandom->Integer(100);
+        
+        // DEBUG
+        cout<<"Using pic # "<<pic_index<<" as a pedestal..."<<endl;
+        
+        //reading data from midas file
+        cout<<"Opening midas file "<<tmpname<<" ..."<<endl;
+        TMReaderInterface* reader = cygnolib::OpenMidasFile(tmpname);
+        bool reading = true;
+        
+        int counter = 0;
+        bool found = false;
+        while (reading) {
+            
+            TMidasEvent event = TMidasEvent();
+            reading = TMReadEvent(reader, &event);
+            if (!reading) {
+                // DEBUG
+                // std::cout<<"EOF reached."<<std::endl;
+                break;
+            }
+            
+            bool cam_found = cygnolib::FindBankByName(event, "CAM0");
+            if(cam_found) {
+                if(counter == pic_index) {
+                    cygnolib::Picture pic=cygnolib::daq_cam2pic(event, "fusion");
+                    
+                    TH2F rootpic(Form("pic_run1_ev%d", entry) , Form("pic_run1_ev%d", entry) , x_pix, -0.5, x_pix-0.5, y_pix, -0.5, y_pix-0.5);
+                    
+                    vector<vector<uint16_t>> vecpic = pic.GetFrame();
+                    for(unsigned int i = 0; i<vecpic.size(); i++) {
+                        for (unsigned int j =0; j<vecpic[0].size(); j++) {
+                            rootpic.SetBinContent(j, i, vecpic[i][j]);
+                        }
+                    }
+                    background=rootpic;
+                    
+                    found = true;
+                    break;
+                }
+                
+                counter++;
+            }
+            
+        }
+        if(!found) {
+            cerr<<"AddBckg: Error: Cannot find pic # "<<pic_index<<" in pedestal run."<<endl;
+            exit(EXIT_FAILURE);
+        }
+        
+    }
+    
+    return;
+}
+
+// Old approach:
+//string rootlocation(string tag, int run){
+//    string sel;
+//    if (tag == "Data") {
+//        if ((run>=936) && (run<=1601)) {
+//            sel = "Data/LTD/Data_Camera/ROOT";
+//        } else if ((run>=1632) && (run<4505)) {
+//            sel = "Data/LAB";
+//        } else if ((run>=4470) && (run<10000)) {
+//            sel = "LAB";
+//        } else {
+//            cerr<<"rootlocation: Error: Data taken with another DAQ or not yet uploaded to the cloud"<<endl;
+//            exit(EXIT_FAILURE);
+//        }
+//    } else if (tag == "DataMango") {
+//        sel = (run<3242) ? "Data/Man" : "MAN";
+//    } else if (tag ==  "MC") {
+//        sel = "Simulation";
+//        cerr<<"rootlocation: Error: automatic download for Simulated data not implemented yet"<<endl;
+//        exit(EXIT_FAILURE);
+//    }
+//
+//    return sel;
+//}
+
+//string root_filename(string tag, int run) {
+//
+//    string sel = rootlocation(tag,run);
+//
+//    string BASE_URL = "https://s3.cloud.infn.it/v1/AUTH_2ebf769785574195bde2ff418deac08a/";
+//    string bucket;
+//    if(tag.find("MC") != std::string::npos) {
+//        bucket = (tag=="MC-old") ? "cygnus" : "cygno-sim";
+//    } else if (tag == "Data") {
+//        bucket = (run<4505) ? "cygnus" : "cygno-data";
+//    } else if (tag == "DataMango") {
+//        bucket = (run<3242) ? "cygnus" : "cygno-data";
+//    }
+//
+//    BASE_URL = Form("%s%s/", BASE_URL.c_str(), bucket.c_str());
+//    string file_root = Form("%s/histogr_Run%05d.root", sel.c_str(), run);
+//
+//    return Form("%s%s", BASE_URL.c_str(), file_root.c_str());
+//}
+//
