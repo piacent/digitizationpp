@@ -161,6 +161,7 @@ int main(int argc, char** argv)
             inputtree->SetBranchAddress("px_particle", &px_particle);
             inputtree->SetBranchAddress("py_particle", &py_particle);
             inputtree->SetBranchAddress("pz_particle", &pz_particle);
+            inputtree->SetBranchAddress("energyDep_hits", &energyDep_hits);
             inputtree->SetBranchAddress("x_hits", &x_hits);
             inputtree->SetBranchAddress("y_hits", &y_hits);
             inputtree->SetBranchAddress("z_hits", &z_hits);
@@ -261,9 +262,11 @@ int main(int argc, char** argv)
                 //    }
                 //}
                 
-                //cout<<eventnumber<<endl;
+                cout<<"Entry "<<entry<<" of "<<totev<<endl;
+                cout<<"Energy "<<energyDep<<" keV"<<endl;
+                
+                
                 eventnumber_out = eventnumber;
-                //cout<<eventnumber_out<<endl;
                 
                 outtree->Fill();
             }
