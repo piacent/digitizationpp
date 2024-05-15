@@ -7,6 +7,13 @@ Digitization code in C++
 ## Dependencies
 
 * ROOT [compiled with the C++17 standard]
+* ROOTANA [https://bitbucket.org/tmidas/rootana/src/master/]
+* OPENCV [https://docs.opencv.org/4.x/d7/d9f/tutorial_linux_install.html]
+
+Before compiling, set the variables ROOTANASYS and OPENCVSYS in your environment:
+
+`export ROOTANASYS="/path/to/rootana/installation/"`
+`export OPENCVSYS="/path/to/opencv/installation/"`
 
 
 ## Installation

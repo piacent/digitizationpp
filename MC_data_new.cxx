@@ -17,11 +17,13 @@
 #include "TTree.h"
 #include "TH1.h"
 #include "TH2.h"
+#include "s3.h"
+#include "cygnolib.h"
 
 using namespace std;
 
 
-////Global and constant value;
+// Global and constant value;
 double GEM1_gain;
 double GEM2_gain;
 double GEM3_gain;
@@ -33,8 +35,16 @@ int y_ini = 0;
 int z_ini = 0;
 
 void ReadConfig(string name, map<string,string>& options);
+void ReadG4Isotopes(string name, map<string,string>& dict_isotopes);
+void ReadIonlist(string name, vector<vector<string>>& ionlist);
 void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile);
 int NelGEM2(const vector<double>& energyDep,const vector<double>& z_hit, map<string,string>& options);
+
+void AddBckg(map<string,string>& options, int entry, TH2F& background);
+
+// Old approach
+//string rootlocation(string tag, int run);   // inconsistency for the MC-old tag!!!
+//string root_filename(string tag, int run);
 
 int main(int argc, char** argv)
 {
@@ -61,8 +71,8 @@ int main(int argc, char** argv)
     }
 	
     // DEBUG
-    cout<<"Input Folder: "<<infolder<<endl;
-    cout<<"Output Folder: "<<outfolder<<endl;
+    // cout<<"Input Folder: "<<infolder<<endl;
+    // cout<<"Output Folder: "<<outfolder<<endl;
     
     map<string,string> options;
     ReadConfig(nome,options);						//Function to be checked
@@ -88,8 +98,7 @@ int main(int argc, char** argv)
     double omega=1./pow(4.*(demag+1)*aperture,2);
 	
     //Code execution
-	
-    int runcount=stoi(options["historunstart"]);		// historunstart does not exist now but make sense to add
+    int run_count = 1;
     auto t0 = std::chrono::steady_clock::now();
     
     if(options["fixed_seed"]=="True" || options["fixed_seed"]=="true") gRandom->SetSeed(0);
@@ -105,6 +114,11 @@ int main(int argc, char** argv)
         cout<<"Creating oufolder..."<<
         system(("mkdir " + outfolder).c_str() );
     }
+    
+    map<string, string> dict_isotopes;
+    if(options["GEANT4isotopes"]=="True") ReadG4Isotopes("../Z_A_isotopes.csv", dict_isotopes);
+    
+    
     
     string ending=".root";
     for(const auto& entry : filesystem::directory_iterator(infolder))
@@ -122,54 +136,120 @@ int main(int argc, char** argv)
         //{
         
         if(ends) {
-            z_ini=0.;
+            
+            //DEBUG
+            //if(filename.find("HeCF4gas_AmBe_part") != string::npos) {
+            if(filename.find("LIME_CADshield") != string::npos) {
+                continue;
+            }
+            
+            vector<vector<string>> SRIM_events;
+            
+            if(options["NR"]=="True" and options["NR_list"]!="") {
+                auto delim1 = filename.find("part");
+                auto delim2 = filename.find(".root");
+                if(delim1==string::npos) throw runtime_error("Cannot determine the 'part' of the file.\n");
+                if(delim2==string::npos) throw runtime_error("Input file is not a root file.\n");
+                auto part= filename.substr(delim1+4, delim2-delim1-4);
+                cout<<"Using NR list from "<<options["NR_list"]<<"_part"<<part<<".py"<<endl;
+                
+                ReadIonlist(Form("%s/%s_part%s.py", infolder.c_str(), options["NR_list"].c_str(), part.c_str()),
+                            SRIM_events);
+                
+            }
+            
+            
+            
             
             auto f         = unique_ptr<TFile> {TFile::Open(filename.c_str())};
             auto inputtree = (TTree*)f->Get("nTuple");
             
-            string fileoutname= Form("histogram_Runs%05d_MC.root",runcount);
-            auto outfile = shared_ptr<TFile> {TFile::Open(Form("%s/%s",
-                                                               outfolder.c_str(),
-                                                               fileoutname.c_str()),
+            int max_events = inputtree->GetEntries();
+            int totev = (stod(options["events"])==-1) ? max_events : stod(options["events"]);
+            totev = min(totev, max_events);
+            
+            int firstentry = stoi(options["start_event"]);
+            if (firstentry>totev) throw runtime_error("Error: First entry is larger than last entry, exiting!");
+            cout << "Processing entries from "<<firstentry<<" to "<<totev<<"."<<endl;
+            
+            
+            // output saved in outfolder/filename/
+            
+            stringstream ssfilename(filename.c_str());
+            string ssfilename_el, filename_tmp;
+            while(getline(ssfilename, ssfilename_el, '/')) {
+                filename_tmp = ssfilename_el;
+            }
+            auto delimFN = filename_tmp.find(".root");
+            string basefilename   = filename_tmp.substr(0, delimFN);
+            string fnameoutfolder = outfolder + "/" + basefilename;
+            if(! filesystem::exists(fnameoutfolder)){
+                system(("mkdir " + fnameoutfolder).c_str() );
+            }
+            
+            // standard: name of output file = histograms_RunRRRRR.root (R run number)
+            string fileoutname= Form("%s/histogram_Runs%07d.root",
+                                     fnameoutfolder.c_str(),
+                                     run_count);
+            
+            // for radioisotope simulation: histograms_RunZZAAANN.root (Z=atomic number, A=mass numbe$
+            // NOTE: this is a 7 digit run number, while reconstruction currently looks for 5
+            string isot_numb = "0000000";
+            if(options["GEANT4isotopes"]=="True") {
+                cout<<"GEANT4isotopes option is active."<<endl;
+                
+                stringstream ssinfile(basefilename);
+                string tmpstr;
+                int counter = 0;
+                while(getline(ssinfile, tmpstr, '_')) {
+                    if(counter == 1) {
+                        isot_numb = dict_isotopes[tmpstr];
+                        // DEBUG
+                        //isot_numb = "00000";
+                    }
+                    counter++;
+                }
+                
+                auto delimBFN = basefilename.find("part");
+                if(delimBFN==string::npos) throw runtime_error("Cannot determine the 'part' of the file.\n");
+                auto part = basefilename.substr(delimBFN+4, basefilename.size() - delimBFN - 4);
+                      
+                if(filename.find("part")!= string::npos) {
+                    fileoutname = Form("%s/histogram_Runs%05d%02d.root",
+                                       fnameoutfolder.c_str(),
+                                       stoi(isot_numb),
+                                       stoi(part)
+                                       );
+                    isot_numb = Form("%05d%02d", stoi(isot_numb), stoi(part));
+                } else {
+                    fileoutname = Form("%s/histogram_Runs%05d00.root",
+                                       fnameoutfolder.c_str(),
+                                       stoi(isot_numb));
+                    
+                    isot_numb = Form("%05d00", stoi(isot_numb));
+                }
+                //DEBUG
+                //cout<<"DEBUG: fileoutname = "<<fileoutname<<endl;
+                //cout<<"DEBUG: isot_numb = "<<isot_numb<<endl;
+            }
+            
+            if(options["start_event"]!="0"){
+                cout<<"out folder "<<fnameoutfolder<<endl;
+                int newpart = (int)(stoi(options["start_event"])/500);
+                int oldpart = stoi(isot_numb);
+                int partnum = oldpart + newpart;
+                fileoutname = Form("%s/histograms_Run%07d.root",
+                                   fnameoutfolder.c_str(),
+                                   partnum);
+            }
+            
+            
+            
+            
+            auto outfile = shared_ptr<TFile> {TFile::Open(fileoutname.c_str(),
                                                           "RECREATE") };
             outfile->mkdir("event_info");
             SaveValues(options,outfile);
-            
-            // Input file branches
-            Int_t eventnumber;
-            Int_t numhits;
-            Double_t energyDep;
-            Double_t energyDep_NR;
-            Int_t particle_type;
-            vector<int>    *pdgID_hits = 0;
-            vector<double> *tracklen_hits = 0;
-            vector<double> *px_particle = 0;
-            vector<double> *py_particle = 0;
-            vector<double> *pz_particle = 0;
-            vector<double> *energyDep_hits = 0;
-            vector<double> *x_hits = 0;
-            vector<double> *y_hits = 0;
-            vector<double> *z_hits = 0;
-            
-            // Some of the following variables not present in (old?) NR simulations???
-            inputtree->SetBranchAddress("eventnumber", &eventnumber);
-            inputtree->SetBranchAddress("numhits", &numhits);
-            inputtree->SetBranchAddress("energyDep", &energyDep);
-            inputtree->SetBranchAddress("energyDep_NR", &energyDep_NR);
-            inputtree->SetBranchAddress("pdgID_hits", &pdgID_hits);
-            inputtree->SetBranchAddress("tracklen_hits", &tracklen_hits);
-            inputtree->SetBranchAddress("px_particle", &px_particle);
-            inputtree->SetBranchAddress("py_particle", &py_particle);
-            inputtree->SetBranchAddress("pz_particle", &pz_particle);
-            inputtree->SetBranchAddress("energyDep_hits", &energyDep_hits);
-            inputtree->SetBranchAddress("x_hits", &x_hits);
-            inputtree->SetBranchAddress("y_hits", &y_hits);
-            inputtree->SetBranchAddress("z_hits", &z_hits);
-            
-            if(options["NR"]=="True") {
-                inputtree->SetBranchAddress("particle_type", &particle_type);
-            }
-            
             
             //Output file branches
             Int_t eventnumber_out   = -999;
@@ -197,6 +277,17 @@ int main(int argc, char** argv)
             Int_t nhits_og = -1;
             Int_t N_photons = -1;
             
+            Int_t row_cut = -1;
+            Int_t N_photons_cut = -1;
+            Float_t cut_energy = -1;
+            Float_t x_min_cut = -1;
+            Float_t x_max_cut = -1;
+            Float_t y_min_cut = -1;
+            Float_t y_max_cut = -1;
+            Float_t z_min_cut = -1;
+            Float_t z_max_cut = -1;
+            Float_t proj_track_2D_cut = -1;
+            
             auto outtree = new TTree("event_info", "event_info");
             
             outtree->Branch("eventnumber", &eventnumber_out, "eventnumber/I");
@@ -223,22 +314,65 @@ int main(int argc, char** argv)
             outtree->Branch("py", &py, "py/F");
             outtree->Branch("pz", &pz, "pz/F");
             outtree->Branch("nhits_og", &nhits_og, "nhits_og/I");
+            if (options["exposure_time_effect"]=="True") {
+                outtree->Branch("N_photons_cut", &N_photons_cut, "N_photons_cut/I");
+                outtree->Branch("row_cut", &row_cut, "row_cut/I");
+                outtree->Branch("cut_energy", &cut_energy, "cut_energy/F");
+                outtree->Branch("x_min_cut", &x_min_cut, "x_min_cut/F");
+                outtree->Branch("x_max_cut", &x_max_cut, "x_max_cut/F");
+                outtree->Branch("y_min_cut", &y_min_cut, "y_min_cut/F");
+                outtree->Branch("y_max_cut", &y_max_cut, "y_max_cut/F");
+                outtree->Branch("z_min_cut", &z_min_cut, "z_min_cut/F");
+                outtree->Branch("z_max_cut", &z_max_cut, "z_max_cut/F");
+                outtree->Branch("proj_track_2D_cut", &proj_track_2D_cut, "proj_track_2D_cut/F");
+            }
+            
+            // Input file branches
+            Int_t eventnumber;
+            Int_t numhits;
+            Double_t energyDep;
+            Double_t energyDep_NR;
+            Int_t particle_type;
+            vector<int>    *pdgID_hits = 0;
+            vector<double> *tracklen_hits = 0;
+            vector<double> *px_particle = 0;
+            vector<double> *py_particle = 0;
+            vector<double> *pz_particle = 0;
+            vector<double> *energyDep_hits = 0;
+            vector<double> *x_hits = 0;
+            vector<double> *y_hits = 0;
+            vector<double> *z_hits = 0;
             
             
-            int max_events = inputtree->GetEntries();
-            int totev = (stod(options["events"])==-1) ? max_events : stod(options["events"]);
-            totev = min(totev, max_events);
+            inputtree->SetBranchAddress("eventnumber", &eventnumber);
+            inputtree->SetBranchAddress("numhits", &numhits);
             
-            // DEBUG
-            //cout<<max_events<<" - "<<totev<<endl;
+            if(options["SRIM"]=="False") { // TO BE CHECK ON REAL SRIM SIMULATIONS
+                inputtree->SetBranchAddress("energyDep",    &energyDep);
+                inputtree->SetBranchAddress("energyDep_NR", &energyDep_NR);
+                inputtree->SetBranchAddress("pdgID_hits",    &pdgID_hits);
+                inputtree->SetBranchAddress("tracklen_hits", &tracklen_hits);
+                inputtree->SetBranchAddress("px_particle", &px_particle);
+                inputtree->SetBranchAddress("py_particle", &py_particle);
+                inputtree->SetBranchAddress("pz_particle", &pz_particle);
+            }
             
-            unique_ptr<TH2D> VignMap;
+            inputtree->SetBranchAddress("energyDep_hits", &energyDep_hits);
+            inputtree->SetBranchAddress("x_hits", &x_hits);
+            inputtree->SetBranchAddress("y_hits", &y_hits);
+            inputtree->SetBranchAddress("z_hits", &z_hits);
+            
+            if(options["NR"]=="True") { // TO BE CHECK ON REAL SRIM SIMULATIONS
+                inputtree->SetBranchAddress("particle_type", &particle_type);
+            }
+            
+            unique_ptr<TH2F> VignMap;
             if(options["Vignetting"]=="True") {
                 string vignfilename = Form("../VignettingMap/%s", options["Vig_Map"].c_str());
                 cout<<"Opening "<<vignfilename<<"..."<<endl;
                 auto VignFile = unique_ptr<TFile> {TFile::Open(vignfilename.c_str())};
                 
-                VignMap = std::make_unique<TH2D>(*(TH2D*)VignFile->Get("normmap_lime"));
+                VignMap = std::make_unique<TH2F>(*(TH2F*)VignFile->Get("normmap_lime"));
                 
                 VignMap->Smooth();
                 
@@ -262,13 +396,28 @@ int main(int argc, char** argv)
                 //    }
                 //}
                 
-                cout<<"Entry "<<entry<<" of "<<totev<<endl;
-                cout<<"Energy "<<energyDep<<" keV"<<endl;
+                //cout<<"Entry "<<entry<<" of "<<totev<<endl;
+                //cout<<"Energy "<<energyDep<<" keV"<<endl;
+                
+                if (energyDep>200) {
+                    continue;
+                }
+                
+                TH2F background;
+                AddBckg(options, entry, background);
+                
+                
                 
                 
                 eventnumber_out = eventnumber;
                 
+                
                 outtree->Fill();
+                gDirectory->cd();
+                
+                // DEBUG
+                //background.Write();
+                
             }
             gDirectory->cd("event_info");
             outtree->Write();
@@ -276,13 +425,11 @@ int main(int argc, char** argv)
             
             f->Close();
             outfile->Close();
+            
+            run_count ++;
         }
         
     }
-	
-	
-	
-	
 	
     auto t1 = std::chrono::steady_clock::now();
     std::chrono::duration<double> dur=t1-t0;
@@ -291,7 +438,8 @@ int main(int argc, char** argv)
     
 }
 
-///////////FUNCTIONS DEFINITION
+// ====== FUNCTIONS DEFINITION ======
+
 void ReadConfig(string name, map<string,string>& options)
 {
     ifstream config(name.c_str());
@@ -313,6 +461,71 @@ void ReadConfig(string name, map<string,string>& options)
 	
 }
 
+void ReadG4Isotopes(string name, map<string,string>& dict_isotopes) {
+    ifstream config(name.c_str());
+    
+    string line;
+    while(getline(config, line))
+    {
+        line.erase(remove_if(line.begin(),line.end(),[] (char c){return isspace(c);}),line.end());
+        line.erase(remove_if(line.begin(),line.end(),[] (char c){return c=='\'';}),line.end());
+        if(line[0] == '#' || line.empty() || line[0] == '{' || line[0] == '}') continue;
+        
+        stringstream to_split(line.c_str());
+        string element;
+        
+        int counter = 0;
+        string index;
+        string val;
+        while(getline(to_split, element, ',')) {
+            if(counter == 0) index = element;
+            else if (counter == 1) val = element;
+            else if (counter == 2) val += Form("%03d", stoi(element));
+            counter++;
+        }
+        dict_isotopes[index]=val;
+        
+        // DEBUG
+        // cout<<"---"<<index<<": "<<val<<endl;
+    }
+    
+    return;
+}
+
+
+void ReadIonlist(string name, vector<vector<string>>& ionlist) {
+    
+    cout<<"Opening and parsing "<<name<<" ..."<<endl;
+    ifstream config(name.c_str());
+    
+    string line;
+    while(getline(config, line))
+    {
+        line.erase(remove_if(line.begin(),line.end(),[] (char c){return isspace(c);}),line.end());
+        if(line.find("ionlist")!=string::npos) continue;
+        stringstream to_split(line.c_str());
+        
+        string element;
+        while(getline(to_split, element, '[')) {
+            if(!element.empty()){
+                element.erase(remove_if(element.begin(),element.end(),[=] (char c){return c==']';}), element.end());
+                stringstream content(element.c_str());
+
+                string var;
+                vector<string> row;
+                while(getline(content, var, ',')) {
+                    if(!var.empty()){
+                        row.push_back(var);
+                    }
+                }
+                ionlist.push_back(row);
+            }
+        }
+        break;
+    }
+    return;
+}
+
 int NelGEM2(vector<double> energyDep,const vector<double>& z_hit, map<string,string>& options)
 {
     vector<double> n_ioniz_el;
@@ -320,7 +533,7 @@ int NelGEM2(vector<double> energyDep,const vector<double>& z_hit, map<string,str
     transform(energyDep.begin(),energyDep.end(),back_inserter(n_ioniz_el), [&] (double a) { return a/opt_pot;});
     
     vector<double> drift_l;
-    int opt_gem=stoi(options["z_gem"]);
+    int opt_gem=stod(options["z_gem"]);
     transform(z_hit.begin(),z_hit.end(),back_inserter(drift_l), [&] (double a) { return abs(a-opt_gem);});
     
     vector<double> n_ioniz_el_mean(n_ioniz_el.size(),0);
@@ -339,7 +552,13 @@ void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile)
     gDirectory->cd("param_dir");
     for(auto const& [key, val] : options)
     {
-        if(key!="tag" and key !="Vig_Map")
+        // DEBUG
+        // cout<<key<<": "<<val<<endl;
+        
+        if(key!="tag"       and key !="Vig_Map" and
+           key!="bckg_path" and key !="ped_cloud_dir" and
+           key!="NR_list"
+           )
         {
             TH1F h(string(key).c_str(),"",1,0,1);
             
@@ -355,3 +574,139 @@ void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile)
     outfile->cd();
     return;
 }
+
+void AddBckg(map<string,string>& options, int entry, TH2F& background) {
+    
+    string tmpfolder = options["bckg_path"];
+    int x_pix = stoi(options["x_pix"]);
+    int y_pix = stoi(options["y_pix"]);
+    
+    
+    if(! filesystem::exists(tmpfolder)){
+        //DEBUG
+        cout<<"Creating tmpfolder..."<<
+        system(("mkdir " + tmpfolder).c_str() );
+    }
+    
+    
+    if(options["bckg"]=="True") {
+        
+        string tmpname = Form( "%s/run%05d.mid.gz", tmpfolder.c_str(), stoi(options["noiserun"]));
+        
+        
+        if(! filesystem::exists(tmpname)) {
+            // DEBUG
+            cout << "Looking for file: "<<tmpname<<endl;
+            bool verbose = false;
+            bool cloud   = true;
+            
+            int run = stoi(options["noiserun"]);
+            
+            //Download or find midas file
+            string filename = s3::cache_file(s3::mid_file(run, options["ped_cloud_dir"], cloud, verbose),
+                                             options["bckg_path"],
+                                             cloud,
+                                             options["ped_cloud_dir"],
+                                             verbose);
+        }
+        
+        int pic_index = gRandom->Integer(100);
+        
+        // DEBUG
+        cout<<"Using pic # "<<pic_index<<" as a pedestal..."<<endl;
+        
+        //reading data from midas file
+        cout<<"Opening midas file "<<tmpname<<" ..."<<endl;
+        TMReaderInterface* reader = cygnolib::OpenMidasFile(tmpname);
+        bool reading = true;
+        
+        int counter = 0;
+        bool found = false;
+        while (reading) {
+            
+            TMidasEvent event = TMidasEvent();
+            reading = TMReadEvent(reader, &event);
+            if (!reading) {
+                // DEBUG
+                // std::cout<<"EOF reached."<<std::endl;
+                break;
+            }
+            
+            bool cam_found = cygnolib::FindBankByName(event, "CAM0");
+            if(cam_found) {
+                if(counter == pic_index) {
+                    cygnolib::Picture pic=cygnolib::daq_cam2pic(event, "fusion");
+                    
+                    TH2F rootpic(Form("pic_run1_ev%d", entry) , Form("pic_run1_ev%d", entry) , x_pix, -0.5, x_pix-0.5, y_pix, -0.5, y_pix-0.5);
+                    
+                    vector<vector<uint16_t>> vecpic = pic.GetFrame();
+                    for(unsigned int i = 0; i<vecpic.size(); i++) {
+                        for (unsigned int j =0; j<vecpic[0].size(); j++) {
+                            rootpic.SetBinContent(j, i, vecpic[i][j]);
+                        }
+                    }
+                    background=rootpic;
+                    
+                    found = true;
+                    break;
+                }
+                
+                counter++;
+            }
+            
+        }
+        if(!found) {
+            cerr<<"AddBckg: Error: Cannot find pic # "<<pic_index<<" in pedestal run."<<endl;
+            exit(EXIT_FAILURE);
+        }
+        
+    }
+    
+    return;
+}
+
+// Old approach:
+//string rootlocation(string tag, int run){
+//    string sel;
+//    if (tag == "Data") {
+//        if ((run>=936) && (run<=1601)) {
+//            sel = "Data/LTD/Data_Camera/ROOT";
+//        } else if ((run>=1632) && (run<4505)) {
+//            sel = "Data/LAB";
+//        } else if ((run>=4470) && (run<10000)) {
+//            sel = "LAB";
+//        } else {
+//            cerr<<"rootlocation: Error: Data taken with another DAQ or not yet uploaded to the cloud"<<endl;
+//            exit(EXIT_FAILURE);
+//        }
+//    } else if (tag == "DataMango") {
+//        sel = (run<3242) ? "Data/Man" : "MAN";
+//    } else if (tag ==  "MC") {
+//        sel = "Simulation";
+//        cerr<<"rootlocation: Error: automatic download for Simulated data not implemented yet"<<endl;
+//        exit(EXIT_FAILURE);
+//    }
+//
+//    return sel;
+//}
+
+//string root_filename(string tag, int run) {
+//
+//    string sel = rootlocation(tag,run);
+//
+//    string BASE_URL = "https://s3.cloud.infn.it/v1/AUTH_2ebf769785574195bde2ff418deac08a/";
+//    string bucket;
+//    if(tag.find("MC") != std::string::npos) {
+//        bucket = (tag=="MC-old") ? "cygnus" : "cygno-sim";
+//    } else if (tag == "Data") {
+//        bucket = (run<4505) ? "cygnus" : "cygno-data";
+//    } else if (tag == "DataMango") {
+//        bucket = (run<3242) ? "cygnus" : "cygno-data";
+//    }
+//
+//    BASE_URL = Form("%s%s/", BASE_URL.c_str(), bucket.c_str());
+//    string file_root = Form("%s/histogr_Run%05d.root", sel.c_str(), run);
+//
+//    return Form("%s%s", BASE_URL.c_str(), file_root.c_str());
+//}
+//

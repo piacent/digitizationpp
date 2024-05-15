@@ -19,10 +19,17 @@
 'y_vox_max'		: 1350,      # y voxel max of the electron cloud (voxels in the GEM plane correspond to pixels)
 
 #FIXME
-'z_gem'			: 250.,      # GEM z coordinate [mm] (Note that in Geant4 CYGNO simulation the center of sensitive region is at 255. mm)
-'tag'			: 'MC',
-'noiserun'              : 665,       # pedestal run to add as background
-'historunstart'         : 2,         # first run number of the histograms_Run%05d.root created
+'x_offset'              : 0.,        # x offset [mm] (to center the image along x) 
+'y_offset'              : 0.,        # y offset [mm] (to center the image along y)
+'z_offset'              : -240.,     # z offset (along drift direction - corresponds to coordinate of the farthest point from the GEM)
+'z_gem'                 : 8.,        # GEM z coordinate [mm] (drift distance will be (position in simulation along drift)+(z_offset)-(z_gem) )
+'tag'			: 'Data',    # Set 'Data' to download a real pedestal run 
+'noiserun'              : 58695,      # pedestal run to add as background
+'ped_cloud_dir'         : 'LNGS',    # directory inside the cloud bucket where the pedestal run is located
+'bckg_path'		: '../tmp/', # set path to pedestal run, or leave it black if you want to download it
+'ped_rand'		: True,      # if true, will extract randomly a picture from the background root file (used for run2 MC comparison)
+'start_event'		: 0,         # index of the first event to digitize
+
 
 'ion_pot'               : 0.0462,    # ionization potential for He/CF4 60/40 [keV]
 'GEM1_HV'               : 420.,      # HV of GEM1
@@ -30,22 +37,33 @@
 'GEM3_HV'               : 420.,      # HV of GEM3
 
 
+# saturation parameters
+'saturation'            : True,      # if 'True' saturation effect is applied on GEM3    
+'x_vox_dim'             : 0.1501736, # x voxel size in [mm]
+'y_vox_dim'             : 0.1501736, # y voxel size in [mm]
+'z_vox_dim'             : 0.1,       # z voxel size in [mm]
 'A'                     : 1.,        # free parameter (total scale factor MC/data) 
-'beta'                  : 0.5e-5,    # saturation parameter
-'absorption_l'          : 1000.,     # absorption lenght in [mm]
-'saturation'            : True,     
+'beta'                  : 1.0e-5,    # saturation parameter   
 
+# optical parameters
 'photons_per_el'        : 0.07,      # number of photons per electron produced in the avalanche
 'counts_per_photon'     : 2.,        # sensor conversion factor counts/photons
 'sensor_size'           : 14.976,    # sensor dimension [mm] ORCA Fusion
 'camera_aperture'       : 0.95,
+'exposure_time_effect'  : True,      # if True simulates the effect of tracks cut by the sensor being not fully exposed
 
 'bckg'                  : True,      # if 'True' background is added
-'NR'                    : False,     # 'True' for NR digitization, 'False' for ER   
+'NR'                    : True,      # 'True' for NR digitization, 'False' for ER
+'SRIM'                  : True,      # 'True' for SRIM NR simulations
+'NR_list'               : 'NRlist_AmBeISO_LIME_neutrons_50cmPE_10cmCu_NOPb_10umStep', # Name of the SRIM MC NR_list file   
+'GEANT4isotopes'        : False,      # specify if you are digitizing tracks from radioactive isotope GEANT4 simulations
 'rootfiles'             : True,      # choose input type: True for G4 root iput, False for SRIM txt files
 'events'                : 3,         # number of events to be processed, -1 = all
 'donotremove'           : True,      # Remove or not the file from the tmp folder
 'fixed_seed'            : False,     # If 'True' the seed of random distributions is set to 0 (for debugging purposes)
+
+'randZ_range'           : 0.,        # Track z coordinate range [mm]. Tracks will be generated uniformly between 'z_hit+randZ_range/2' and 'z_hit-randZ_range/2'
+'absorption_l'          : 1000.,     # absorption lenght in [mm]
 
 'Vignetting'		: False,      #Add vignetting effect according to the MAP
 'Vig_Map'		: 'vignette_run04117.root',
