@@ -23,7 +23,7 @@
 using namespace std;
 
 
-////Global and constant value;
+// Global and constant value;
 double GEM1_gain;
 double GEM2_gain;
 double GEM3_gain;
@@ -35,10 +35,11 @@ int y_ini = 0;
 int z_ini = 0;
 
 void ReadConfig(string name, map<string,string>& options);
+void ReadG4Isotopes(string name, map<string,string>& dict_isotopes);
+void ReadIonlist(string name, vector<vector<string>>& ionlist);
 void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile);
 int NelGEM2(const vector<double>& energyDep,const vector<double>& z_hit, map<string,string>& options);
 
-// WIP
 void AddBckg(map<string,string>& options, int entry, TH2F& background);
 
 // Old approach
@@ -70,8 +71,8 @@ int main(int argc, char** argv)
     }
 	
     // DEBUG
-    cout<<"Input Folder: "<<infolder<<endl;
-    cout<<"Output Folder: "<<outfolder<<endl;
+    // cout<<"Input Folder: "<<infolder<<endl;
+    // cout<<"Output Folder: "<<outfolder<<endl;
     
     map<string,string> options;
     ReadConfig(nome,options);						//Function to be checked
@@ -115,6 +116,13 @@ int main(int argc, char** argv)
         system(("mkdir " + outfolder).c_str() );
     }
     
+    map<string, string> dict_isotopes;
+    if(options["GEANT4isotopes"]=="True") ReadG4Isotopes("../Z_A_isotopes.csv", dict_isotopes);
+    
+    
+    
+    
+    
     string ending=".root";
     for(const auto& entry : filesystem::directory_iterator(infolder))
     {
@@ -131,6 +139,25 @@ int main(int argc, char** argv)
         //{
         
         if(ends) {
+            
+            
+            
+            vector<vector<string>> SRIM_events;
+            
+            if(options["NR"]=="True" and options["NR_list"]!="") {
+                auto delim1 = filename.find("part");
+                auto delim2 = filename.find(".root");
+                if(delim1==string::npos) throw runtime_error("Cannot determine the 'part' of the file.\n");
+                if(delim2==string::npos) throw runtime_error("Input file is not a root file.\n");
+                auto part= filename.substr(delim1+4, delim2-delim1-4);
+                cout<<"Using NR list from "<<options["NR_list"]<<"_part"<<part<<".py"<<endl;
+                
+                ReadIonlist(Form("%s/%s_part%s.py", infolder.c_str(), options["NR_list"].c_str(), part.c_str()),
+                            SRIM_events);
+                
+            }
+            
+            
             z_ini=0.;
             
             auto f         = unique_ptr<TFile> {TFile::Open(filename.c_str())};
@@ -178,6 +205,9 @@ int main(int argc, char** argv)
             if(options["NR"]=="True") {
                 inputtree->SetBranchAddress("particle_type", &particle_type);
             }
+            
+            
+            
             
             
             //Output file branches
@@ -238,8 +268,6 @@ int main(int argc, char** argv)
             int totev = (stod(options["events"])==-1) ? max_events : stod(options["events"]);
             totev = min(totev, max_events);
             
-            // DEBUG
-            //cout<<max_events<<" - "<<totev<<endl;
             
             unique_ptr<TH2F> VignMap;
             if(options["Vignetting"]=="True") {
@@ -271,29 +299,23 @@ int main(int argc, char** argv)
                 //    }
                 //}
                 
-                cout<<"Entry "<<entry<<" of "<<totev<<endl;
-                cout<<"Energy "<<energyDep<<" keV"<<endl;
+                //cout<<"Entry "<<entry<<" of "<<totev<<endl;
+                //cout<<"Energy "<<energyDep<<" keV"<<endl;
                 
                 if (energyDep>200) {
                     continue;
                 }
                 
                 TH2F background;
-                
                 AddBckg(options, entry, background);
                 
-                // Debug
-                // cout<<"=================="<<endl;
-                // cout<<background.GetBinContent(0, 0)<<" "<<background.GetBinContent(0, 1)<<endl;
-                // cout<<background.GetBinContent(1, 0)<<" "<<background.GetBinContent(1, 1)<<endl;
-                // cout<<"=================="<<endl;
                 
                 
                 
                 eventnumber_out = eventnumber;
                 
-                outtree->Fill();
                 
+                outtree->Fill();
                 gDirectory->cd();
                 
                 // DEBUG
@@ -310,10 +332,6 @@ int main(int argc, char** argv)
         
     }
 	
-	
-	
-	
-	
     auto t1 = std::chrono::steady_clock::now();
     std::chrono::duration<double> dur=t1-t0;
     cout << "Time taken in seconds is: " << dur.count() << endl;
@@ -321,7 +339,8 @@ int main(int argc, char** argv)
     
 }
 
-///////////FUNCTIONS DEFINITION
+// ====== FUNCTIONS DEFINITION ======
+
 void ReadConfig(string name, map<string,string>& options)
 {
     ifstream config(name.c_str());
@@ -341,6 +360,71 @@ void ReadConfig(string name, map<string,string>& options)
         options[index]=val;
     }
 	
+}
+
+void ReadG4Isotopes(string name, map<string,string>& dict_isotopes) {
+    ifstream config(name.c_str());
+    
+    string line;
+    while(getline(config, line))
+    {
+        line.erase(remove_if(line.begin(),line.end(),[] (char c){return isspace(c);}),line.end());
+        line.erase(remove_if(line.begin(),line.end(),[] (char c){return c=='\'';}),line.end());
+        if(line[0] == '#' || line.empty() || line[0] == '{' || line[0] == '}') continue;
+        
+        stringstream to_split(line.c_str());
+        string element;
+        
+        int counter = 0;
+        string index;
+        string val;
+        while(getline(to_split, element, ',')) {
+            if(counter == 0) index = element;
+            else if (counter == 1) val = element;
+            else if (counter == 2) val += Form("%03d", stoi(element));
+            counter++;
+        }
+        dict_isotopes[index]=val;
+        
+        // DEBUG
+        // cout<<"---"<<index<<": "<<val<<endl;
+    }
+    
+    return;
+}
+
+
+void ReadIonlist(string name, vector<vector<string>>& ionlist) {
+    
+    cout<<"Opening and parsing "<<name<<" ..."<<endl;
+    ifstream config(name.c_str());
+    
+    string line;
+    while(getline(config, line))
+    {
+        line.erase(remove_if(line.begin(),line.end(),[] (char c){return isspace(c);}),line.end());
+        if(line.find("ionlist")!=string::npos) continue;
+        stringstream to_split(line.c_str());
+        
+        string element;
+        while(getline(to_split, element, '[')) {
+            if(!element.empty()){
+                element.erase(remove_if(element.begin(),element.end(),[=] (char c){return c==']';}), element.end());
+                stringstream content(element.c_str());
+
+                string var;
+                vector<string> row;
+                while(getline(content, var, ',')) {
+                    if(!var.empty()){
+                        row.push_back(var);
+                    }
+                }
+                ionlist.push_back(row);
+            }
+        }
+        break;
+    }
+    return;
 }
 
 int NelGEM2(vector<double> energyDep,const vector<double>& z_hit, map<string,string>& options)
@@ -373,7 +457,9 @@ void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile)
         // cout<<key<<": "<<val<<endl;
         
         if(key!="tag"       and key !="Vig_Map" and
-           key!="bckg_path" and key !="ped_cloud_dir")
+           key!="bckg_path" and key !="ped_cloud_dir" and
+           key!="NR_list"
+           )
         {
             TH1F h(string(key).c_str(),"",1,0,1);
             
@@ -390,8 +476,6 @@ void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile)
     return;
 }
 
-
-//WIP
 void AddBckg(map<string,string>& options, int entry, TH2F& background) {
     
     string tmpfolder = options["bckg_path"];
@@ -414,7 +498,6 @@ void AddBckg(map<string,string>& options, int entry, TH2F& background) {
         if(! filesystem::exists(tmpname)) {
             // DEBUG
             cout << "Looking for file: "<<tmpname<<endl;
-            bool debug   = true;
             bool verbose = false;
             bool cloud   = true;
             
