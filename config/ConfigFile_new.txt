@@ -19,7 +19,6 @@
 'y_vox_max'		: 1350,      # y voxel max of the electron cloud (voxels in the GEM plane correspond to pixels)
 
 #FIXME
-'historunstart'         : 2,         # first run number of the histograms_Run%05d.root created
 'x_offset'              : 0.,        # x offset [mm] (to center the image along x) 
 'y_offset'              : 0.,        # y offset [mm] (to center the image along y)
 'z_offset'              : -240.,     # z offset (along drift direction - corresponds to coordinate of the farthest point from the GEM)
@@ -29,6 +28,7 @@
 'ped_cloud_dir'         : 'LNGS',    # directory inside the cloud bucket where the pedestal run is located
 'bckg_path'		: '../tmp/', # set path to pedestal run, or leave it black if you want to download it
 'ped_rand'		: True,      # if true, will extract randomly a picture from the background root file (used for run2 MC comparison)
+'start_event'		: 0,         # index of the first event to digitize
 
 
 'ion_pot'               : 0.0462,    # ionization potential for He/CF4 60/40 [keV]
@@ -50,11 +50,13 @@
 'counts_per_photon'     : 2.,        # sensor conversion factor counts/photons
 'sensor_size'           : 14.976,    # sensor dimension [mm] ORCA Fusion
 'camera_aperture'       : 0.95,
+'exposure_time_effect'  : True,      # if True simulates the effect of tracks cut by the sensor being not fully exposed
 
 'bckg'                  : True,      # if 'True' background is added
-'NR'                    : True,     # 'True' for NR digitization, 'False' for ER   
+'NR'                    : True,      # 'True' for NR digitization, 'False' for ER
+'SRIM'                  : True,      # 'True' for SRIM NR simulations
 'NR_list'               : 'NRlist_AmBeISO_LIME_neutrons_50cmPE_10cmCu_NOPb_10umStep', # Name of the SRIM MC NR_list file   
-'GEANT4isotopes'        : True,      # specify if you are digitizing tracks from radioactive isotope GEANT4 simulations
+'GEANT4isotopes'        : False,      # specify if you are digitizing tracks from radioactive isotope GEANT4 simulations
 'rootfiles'             : True,      # choose input type: True for G4 root iput, False for SRIM txt files
 'events'                : 3,         # number of events to be processed, -1 = all
 'donotremove'           : True,      # Remove or not the file from the tmp folder

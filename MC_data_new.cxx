@@ -98,8 +98,7 @@ int main(int argc, char** argv)
     double omega=1./pow(4.*(demag+1)*aperture,2);
 	
     //Code execution
-	
-    int runcount=stoi(options["historunstart"]);		// historunstart does not exist now but make sense to add
+    int run_count = 1;
     auto t0 = std::chrono::steady_clock::now();
     
     if(options["fixed_seed"]=="True" || options["fixed_seed"]=="true") gRandom->SetSeed(0);
@@ -121,8 +120,6 @@ int main(int argc, char** argv)
     
     
     
-    
-    
     string ending=".root";
     for(const auto& entry : filesystem::directory_iterator(infolder))
     {
@@ -140,7 +137,11 @@ int main(int argc, char** argv)
         
         if(ends) {
             
-            
+            //DEBUG
+            //if(filename.find("HeCF4gas_AmBe_part") != string::npos) {
+            if(filename.find("LIME_CADshield") != string::npos) {
+                continue;
+            }
             
             vector<vector<string>> SRIM_events;
             
@@ -158,57 +159,97 @@ int main(int argc, char** argv)
             }
             
             
-            z_ini=0.;
+            
             
             auto f         = unique_ptr<TFile> {TFile::Open(filename.c_str())};
             auto inputtree = (TTree*)f->Get("nTuple");
             
-            string fileoutname= Form("histogram_Runs%05d_MC.root",runcount);
-            auto outfile = shared_ptr<TFile> {TFile::Open(Form("%s/%s",
-                                                               outfolder.c_str(),
-                                                               fileoutname.c_str()),
-                                                          "RECREATE") };
-            outfile->mkdir("event_info");
-            SaveValues(options,outfile);
+            int max_events = inputtree->GetEntries();
+            int totev = (stod(options["events"])==-1) ? max_events : stod(options["events"]);
+            totev = min(totev, max_events);
             
-            // Input file branches
-            Int_t eventnumber;
-            Int_t numhits;
-            Double_t energyDep;
-            Double_t energyDep_NR;
-            Int_t particle_type;
-            vector<int>    *pdgID_hits = 0;
-            vector<double> *tracklen_hits = 0;
-            vector<double> *px_particle = 0;
-            vector<double> *py_particle = 0;
-            vector<double> *pz_particle = 0;
-            vector<double> *energyDep_hits = 0;
-            vector<double> *x_hits = 0;
-            vector<double> *y_hits = 0;
-            vector<double> *z_hits = 0;
+            int firstentry = stoi(options["start_event"]);
+            if (firstentry>totev) throw runtime_error("Error: First entry is larger than last entry, exiting!");
+            cout << "Processing entries from "<<firstentry<<" to "<<totev<<"."<<endl;
             
-            // Some of the following variables not present in (old?) NR simulations???
-            inputtree->SetBranchAddress("eventnumber", &eventnumber);
-            inputtree->SetBranchAddress("numhits", &numhits);
-            inputtree->SetBranchAddress("energyDep", &energyDep);
-            inputtree->SetBranchAddress("energyDep_NR", &energyDep_NR);
-            inputtree->SetBranchAddress("pdgID_hits", &pdgID_hits);
-            inputtree->SetBranchAddress("tracklen_hits", &tracklen_hits);
-            inputtree->SetBranchAddress("px_particle", &px_particle);
-            inputtree->SetBranchAddress("py_particle", &py_particle);
-            inputtree->SetBranchAddress("pz_particle", &pz_particle);
-            inputtree->SetBranchAddress("energyDep_hits", &energyDep_hits);
-            inputtree->SetBranchAddress("x_hits", &x_hits);
-            inputtree->SetBranchAddress("y_hits", &y_hits);
-            inputtree->SetBranchAddress("z_hits", &z_hits);
             
-            if(options["NR"]=="True") {
-                inputtree->SetBranchAddress("particle_type", &particle_type);
+            // output saved in outfolder/filename/
+            
+            stringstream ssfilename(filename.c_str());
+            string ssfilename_el, filename_tmp;
+            while(getline(ssfilename, ssfilename_el, '/')) {
+                filename_tmp = ssfilename_el;
+            }
+            auto delimFN = filename_tmp.find(".root");
+            string basefilename   = filename_tmp.substr(0, delimFN);
+            string fnameoutfolder = outfolder + "/" + basefilename;
+            if(! filesystem::exists(fnameoutfolder)){
+                system(("mkdir " + fnameoutfolder).c_str() );
+            }
+            
+            // standard: name of output file = histograms_RunRRRRR.root (R run number)
+            string fileoutname= Form("%s/histogram_Runs%07d.root",
+                                     fnameoutfolder.c_str(),
+                                     run_count);
+            
+            // for radioisotope simulation: histograms_RunZZAAANN.root (Z=atomic number, A=mass numbe$
+            // NOTE: this is a 7 digit run number, while reconstruction currently looks for 5
+            string isot_numb = "0000000";
+            if(options["GEANT4isotopes"]=="True") {
+                cout<<"GEANT4isotopes option is active."<<endl;
+                
+                stringstream ssinfile(basefilename);
+                string tmpstr;
+                int counter = 0;
+                while(getline(ssinfile, tmpstr, '_')) {
+                    if(counter == 1) {
+                        isot_numb = dict_isotopes[tmpstr];
+                        // DEBUG
+                        //isot_numb = "00000";
+                    }
+                    counter++;
+                }
+                
+                auto delimBFN = basefilename.find("part");
+                if(delimBFN==string::npos) throw runtime_error("Cannot determine the 'part' of the file.\n");
+                auto part = basefilename.substr(delimBFN+4, basefilename.size() - delimBFN - 4);
+                      
+                if(filename.find("part")!= string::npos) {
+                    fileoutname = Form("%s/histogram_Runs%05d%02d.root",
+                                       fnameoutfolder.c_str(),
+                                       stoi(isot_numb),
+                                       stoi(part)
+                                       );
+                    isot_numb = Form("%05d%02d", stoi(isot_numb), stoi(part));
+                } else {
+                    fileoutname = Form("%s/histogram_Runs%05d00.root",
+                                       fnameoutfolder.c_str(),
+                                       stoi(isot_numb));
+                    
+                    isot_numb = Form("%05d00", stoi(isot_numb));
+                }
+                //DEBUG
+                //cout<<"DEBUG: fileoutname = "<<fileoutname<<endl;
+                //cout<<"DEBUG: isot_numb = "<<isot_numb<<endl;
+            }
+            
+            if(options["start_event"]!="0"){
+                cout<<"out folder "<<fnameoutfolder<<endl;
+                int newpart = (int)(stoi(options["start_event"])/500);
+                int oldpart = stoi(isot_numb);
+                int partnum = oldpart + newpart;
+                fileoutname = Form("%s/histograms_Run%07d.root",
+                                   fnameoutfolder.c_str(),
+                                   partnum);
             }
             
             
             
             
+            auto outfile = shared_ptr<TFile> {TFile::Open(fileoutname.c_str(),
+                                                          "RECREATE") };
+            outfile->mkdir("event_info");
+            SaveValues(options,outfile);
             
             //Output file branches
             Int_t eventnumber_out   = -999;
@@ -236,6 +277,17 @@ int main(int argc, char** argv)
             Int_t nhits_og = -1;
             Int_t N_photons = -1;
             
+            Int_t row_cut = -1;
+            Int_t N_photons_cut = -1;
+            Float_t cut_energy = -1;
+            Float_t x_min_cut = -1;
+            Float_t x_max_cut = -1;
+            Float_t y_min_cut = -1;
+            Float_t y_max_cut = -1;
+            Float_t z_min_cut = -1;
+            Float_t z_max_cut = -1;
+            Float_t proj_track_2D_cut = -1;
+            
             auto outtree = new TTree("event_info", "event_info");
             
             outtree->Branch("eventnumber", &eventnumber_out, "eventnumber/I");
@@ -262,12 +314,57 @@ int main(int argc, char** argv)
             outtree->Branch("py", &py, "py/F");
             outtree->Branch("pz", &pz, "pz/F");
             outtree->Branch("nhits_og", &nhits_og, "nhits_og/I");
+            if (options["exposure_time_effect"]=="True") {
+                outtree->Branch("N_photons_cut", &N_photons_cut, "N_photons_cut/I");
+                outtree->Branch("row_cut", &row_cut, "row_cut/I");
+                outtree->Branch("cut_energy", &cut_energy, "cut_energy/F");
+                outtree->Branch("x_min_cut", &x_min_cut, "x_min_cut/F");
+                outtree->Branch("x_max_cut", &x_max_cut, "x_max_cut/F");
+                outtree->Branch("y_min_cut", &y_min_cut, "y_min_cut/F");
+                outtree->Branch("y_max_cut", &y_max_cut, "y_max_cut/F");
+                outtree->Branch("z_min_cut", &z_min_cut, "z_min_cut/F");
+                outtree->Branch("z_max_cut", &z_max_cut, "z_max_cut/F");
+                outtree->Branch("proj_track_2D_cut", &proj_track_2D_cut, "proj_track_2D_cut/F");
+            }
+            
+            // Input file branches
+            Int_t eventnumber;
+            Int_t numhits;
+            Double_t energyDep;
+            Double_t energyDep_NR;
+            Int_t particle_type;
+            vector<int>    *pdgID_hits = 0;
+            vector<double> *tracklen_hits = 0;
+            vector<double> *px_particle = 0;
+            vector<double> *py_particle = 0;
+            vector<double> *pz_particle = 0;
+            vector<double> *energyDep_hits = 0;
+            vector<double> *x_hits = 0;
+            vector<double> *y_hits = 0;
+            vector<double> *z_hits = 0;
             
             
-            int max_events = inputtree->GetEntries();
-            int totev = (stod(options["events"])==-1) ? max_events : stod(options["events"]);
-            totev = min(totev, max_events);
+            inputtree->SetBranchAddress("eventnumber", &eventnumber);
+            inputtree->SetBranchAddress("numhits", &numhits);
             
+            if(options["SRIM"]=="False") { // TO BE CHECK ON REAL SRIM SIMULATIONS
+                inputtree->SetBranchAddress("energyDep",    &energyDep);
+                inputtree->SetBranchAddress("energyDep_NR", &energyDep_NR);
+                inputtree->SetBranchAddress("pdgID_hits",    &pdgID_hits);
+                inputtree->SetBranchAddress("tracklen_hits", &tracklen_hits);
+                inputtree->SetBranchAddress("px_particle", &px_particle);
+                inputtree->SetBranchAddress("py_particle", &py_particle);
+                inputtree->SetBranchAddress("pz_particle", &pz_particle);
+            }
+            
+            inputtree->SetBranchAddress("energyDep_hits", &energyDep_hits);
+            inputtree->SetBranchAddress("x_hits", &x_hits);
+            inputtree->SetBranchAddress("y_hits", &y_hits);
+            inputtree->SetBranchAddress("z_hits", &z_hits);
+            
+            if(options["NR"]=="True") { // TO BE CHECK ON REAL SRIM SIMULATIONS
+                inputtree->SetBranchAddress("particle_type", &particle_type);
+            }
             
             unique_ptr<TH2F> VignMap;
             if(options["Vignetting"]=="True") {
@@ -328,6 +425,8 @@ int main(int argc, char** argv)
             
             f->Close();
             outfile->Close();
+            
+            run_count ++;
         }
         
     }
