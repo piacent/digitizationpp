@@ -43,6 +43,9 @@ int NelGEM2(const vector<double>& energyDep,const vector<double>& z_hit, map<str
 void AddBckg(map<string,string>& options, int entry, TH2I& background);
 
 bool is_NR(vector<int> pdgID_hits, int pdg);
+double angle_between(vector<double>& v1, vector<double>& v2);
+vector<double> crossProduct(vector<double>& a, vector<double>& b);
+vector<double> rotateByAngleAndAxis(vector<double>& vec, double angle, vector<double>& axis);
 
 // Old approach
 //string rootlocation(string tag, int run);   // inconsistency for the MC-old tag!!!
@@ -140,8 +143,8 @@ int main(int argc, char** argv)
         if(ends) {
             
             //DEBUG
-            if(filename.find("HeCF4gas_AmBe_part") != string::npos) {
-            //if(filename.find("LIME_CADshield") != string::npos) {
+            //if(filename.find("HeCF4gas_AmBe_part") != string::npos) {
+            if(filename.find("LIME_CADshield") != string::npos) {
                 continue;
             }
             
@@ -407,7 +410,7 @@ int main(int argc, char** argv)
                 } else {
                     cout<<"Energy "<<energyDep    <<" keV"<<endl;
                 }
-                                
+                
                 if(options["NR"]=="False" && energyDep>900    ) continue;
                 if(options["NR"]=="True"  && ekin_particle>900) continue;
                 
@@ -415,7 +418,7 @@ int main(int argc, char** argv)
                 row_cut         = -1;
                 eventnumber_out = eventnumber;
                 
-                // FIXME [???]
+                // FIXME: [???]
                 if(options["NR"] == "True") {
                     energy            = ekin_particle;
                     particle_type_out = particle_type;
@@ -426,7 +429,7 @@ int main(int argc, char** argv)
                     energy = energyDep;
                     if (energyDep_NR>0) particle_type_out = is_NR(*pdgID_hits, int(1.e9));
                     else particle_type_out = (*pdgID_hits)[0];  // this will tell us if the deposit was
-                                                                // started by a photon or an electron
+                    // started by a photon or an electron
                 }
                 // DEBUG
                 //cout<<"energyDep_NR = "<<energyDep_NR<<endl;
@@ -469,7 +472,7 @@ int main(int argc, char** argv)
                 TH2I background;
                 AddBckg(options, entry, background);
                 
-                if (energy < options["ion_pot"]){
+                if (energy < stod(options["ion_pot"])){
                     energy = 0;
                     TH2I final_image = background;
                     
@@ -480,10 +483,71 @@ int main(int argc, char** argv)
                     continue;
                 }
                 
+                vector<double> x_hits_tr;
+                vector<double> y_hits_tr;
+                vector<double> z_hits_tr;
                 
+
+                if (options["NR"]=="True") { // FIXME: TO BE CHECKED!!!!!
+                    // x_hits_tr = np.array(tree.x_hits) + opt.x_offset
+                    // y_hits_tr = np.array(tree.y_hits) + opt.y_offset
+                    // z_hits_tr = np.array(tree.z_hits) + opt.z_offset
+                    vector<double> v1 = {1.,0.,0.};
+                    vector<double> v2 = {stod(SRIM_events[entry][3])-stod(SRIM_events[entry][2]),
+                                         stod(SRIM_events[entry][5])-stod(SRIM_events[entry][4]),
+                                         stod(SRIM_events[entry][7])-stod(SRIM_events[entry][6]),
+                                        };
+                    
+                    double        angle = angle_between(v1, v2);
+                    vector<double> axis =  crossProduct(v1, v2);
+                    
+                    // DEBUG
+                    //std::cout<<angle<<endl;
+                    //std::cout<<"-"<<axis[0]<<","<<axis[1]<<","<<axis[2]<<endl;
+                    
+                    
+                    for(unsigned int ihit=0; ihit < numhits; ihit++) {
+                        vector<double> tmpvec = {(*x_hits)[ihit], (*y_hits)[ihit], (*z_hits)[ihit]};
+                        vector<double> rotvec = rotateByAngleAndAxis(tmpvec, angle, axis);
+                        
+                        x_hits_tr.push_back(rotvec[0]+stod(SRIM_events[entry][2])+stod(options["x_offset"]));
+                        y_hits_tr.push_back(rotvec[1]+stod(SRIM_events[entry][4])+stod(options["y_offset"]));
+                        z_hits_tr.push_back(rotvec[2]+stod(SRIM_events[entry][6])+stod(options["z_offset"]));
+                    }
+                    
+                } else {
+                    transform(z_hits->begin(),
+                              z_hits->end(),
+                              back_inserter(x_hits_tr),
+                              [&] (double a) {return a + stod(options["x_offset"]);});
+                    transform(y_hits->begin(),
+                              y_hits->end(),
+                              back_inserter(y_hits_tr),
+                              [&] (double a) {return a + stod(options["y_offset"]);});
+                    transform(x_hits->begin(),
+                              x_hits->end(),
+                              back_inserter(z_hits_tr),
+                              [&] (double a) {return a + stod(options["z_offset"]);});
+                }
+
+                // DEBUG
+                //for(int ihit=0; ihit < numhits; ihit++) {
+                //    cout<<x_hits_tr[ihit]<<",";
+                //    cout<<y_hits_tr[ihit]<<",";
+                //    cout<<z_hits_tr[ihit]<<"\n";
+                //}
                 
+                vector<double> energy_hits = (*energyDep_hits);
                 
-                eventnumber_out = eventnumber;
+                // add random Z to tracks
+                if (stod(options["randZ_range"]) != 0) {
+                    double rand = (gRandom->Uniform() - 0.5) * stod(options["randZ_range"]);
+                    //DEBUG
+                    //cout<<"rand = "<<rand<<endl;
+                    for(int ihit=0; ihit<numhits; ihit++) {
+                        z_hits_tr[ihit] += rand;
+                    }
+                }
                 
                 
                 outtree->Fill();
@@ -751,6 +815,61 @@ bool is_NR(vector<int> pdgID_hits, int pdg) {
     }
     return ret;
 }
+
+// Returns the angle in radians between vectors 'v1' and 'v2'
+// >>> angle_between((1, 0, 0), (0, 1, 0))
+// 1.5707963267948966
+// >>> angle_between((1, 0, 0), (1, 0, 0))
+// 0.0
+// >>> angle_between((1, 0, 0), (-1, 0, 0))
+// 3.141592653589793
+
+double angle_between(vector<double>& v1, vector<double>& v2) {
+    if (v2.size() != 3 || v1.size() != 3) {
+        throw std::invalid_argument("angle_between: Both input vectors must have exactly 3 elements.");
+    }
+    
+    double dot    = v1[0]*v2[0]+v1[1]*v2[1]+v1[2]*v2[2];
+    double lenSq1 = v1[0]*v1[0]+v1[1]*v1[1]+v1[2]*v1[2];
+    double lenSq2 = v2[0]*v2[0]+v2[1]*v2[1]+v2[2]*v2[2];
+    
+    //DEBUG
+    //cout<<"~"<<dot<<","<<lenSq1<<","<<lenSq2<<endl;
+    
+    double angle = acos(dot/sqrt(lenSq1 * lenSq2));
+    return angle;
+}
+
+vector<double> crossProduct(vector<double>& a, vector<double>& b) {
+    if (a.size() != 3 || b.size() != 3) {
+        throw std::invalid_argument("crossProduct: Both input vectors must have exactly 3 elements.");
+    }
+    vector<double> result(3);
+    result[0] = a[1] * b[2] - a[2] * b[1];
+    result[1] = a[2] * b[0] - a[0] * b[2];
+    result[2] = a[0] * b[1] - a[1] * b[0];
+    return result;
+}
+
+
+vector<double> rotateByAngleAndAxis(vector<double>& vec, double angle, vector<double>& axis) {
+    if (vec.size() != 3 || axis.size() != 3) {
+        throw std::invalid_argument("rotateByAngleAndAxis: Both input vectors must have exactly 3 elements.");
+    }
+    
+    // v_rot = (costheta)v + (sintheta)(axis x v) + (1-cos(theta)) (axis dot v) axis
+    vector<double> result(3);
+    
+    vector<double> axisXvec = crossProduct(axis, vec);
+    double axisDOTvec       = inner_product(axis.begin(), axis.end(), vec.begin(), 0);
+    
+    result[0] = cos(angle) * vec[0] + sin(angle) * axisXvec[0] + (1.-cos(angle))*axisDOTvec*axis[0];
+    result[1] = cos(angle) * vec[1] + sin(angle) * axisXvec[1] + (1.-cos(angle))*axisDOTvec*axis[1];
+    result[2] = cos(angle) * vec[2] + sin(angle) * axisXvec[2] + (1.-cos(angle))*axisDOTvec*axis[2];
+    
+    return result;
+}
+
 
 // Old approach:
 //string rootlocation(string tag, int run){
