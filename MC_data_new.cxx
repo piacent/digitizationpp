@@ -40,7 +40,9 @@ void ReadIonlist(string name, vector<vector<string>>& ionlist);
 void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile);
 int NelGEM2(const vector<double>& energyDep,const vector<double>& z_hit, map<string,string>& options);
 
-void AddBckg(map<string,string>& options, int entry, TH2F& background);
+void AddBckg(map<string,string>& options, int entry, TH2I& background);
+
+bool is_NR(vector<int> pdgID_hits, int pdg);
 
 // Old approach
 //string rootlocation(string tag, int run);   // inconsistency for the MC-old tag!!!
@@ -138,14 +140,14 @@ int main(int argc, char** argv)
         if(ends) {
             
             //DEBUG
-            //if(filename.find("HeCF4gas_AmBe_part") != string::npos) {
-            if(filename.find("LIME_CADshield") != string::npos) {
+            if(filename.find("HeCF4gas_AmBe_part") != string::npos) {
+            //if(filename.find("LIME_CADshield") != string::npos) {
                 continue;
             }
             
             vector<vector<string>> SRIM_events;
             
-            if(options["NR"]=="True" and options["NR_list"]!="") {
+            if(options["NR"]=="True" && options["NR_list"]!="") {
                 auto delim1 = filename.find("part");
                 auto delim2 = filename.find(".root");
                 if(delim1==string::npos) throw runtime_error("Cannot determine the 'part' of the file.\n");
@@ -332,6 +334,7 @@ int main(int argc, char** argv)
             Int_t numhits;
             Double_t energyDep;
             Double_t energyDep_NR;
+            Float_t  ekin_particle;
             Int_t particle_type;
             vector<int>    *pdgID_hits = 0;
             vector<double> *tracklen_hits = 0;
@@ -347,7 +350,7 @@ int main(int argc, char** argv)
             inputtree->SetBranchAddress("eventnumber", &eventnumber);
             inputtree->SetBranchAddress("numhits", &numhits);
             
-            if(options["SRIM"]=="False") { // TO BE CHECK ON REAL SRIM SIMULATIONS
+            if(options["NR"]=="False") { // TO BE CHECK ON REAL SRIM SIMULATIONS
                 inputtree->SetBranchAddress("energyDep",    &energyDep);
                 inputtree->SetBranchAddress("energyDep_NR", &energyDep_NR);
                 inputtree->SetBranchAddress("pdgID_hits",    &pdgID_hits);
@@ -364,6 +367,7 @@ int main(int argc, char** argv)
             
             if(options["NR"]=="True") { // TO BE CHECK ON REAL SRIM SIMULATIONS
                 inputtree->SetBranchAddress("particle_type", &particle_type);
+                inputtree->SetBranchAddress("ekin_particle", &ekin_particle);
             }
             
             unique_ptr<TH2F> VignMap;
@@ -396,15 +400,85 @@ int main(int argc, char** argv)
                 //    }
                 //}
                 
-                //cout<<"Entry "<<entry<<" of "<<totev<<endl;
-                //cout<<"Energy "<<energyDep<<" keV"<<endl;
+                cout<<"Entry "<<entry<<" of "<<totev<<endl;
                 
-                if (energyDep>200) {
+                if (options["NR"]=="True"){
+                    cout<<"Energy "<<ekin_particle<<" keV"<<endl;
+                } else {
+                    cout<<"Energy "<<energyDep    <<" keV"<<endl;
+                }
+                                
+                if(options["NR"]=="False" && energyDep>900    ) continue;
+                if(options["NR"]=="True"  && ekin_particle>900) continue;
+                
+                //initialize array values - to save info also if the track is skipped (background only)
+                row_cut         = -1;
+                eventnumber_out = eventnumber;
+                
+                // FIXME [???]
+                if(options["NR"] == "True") {
+                    energy            = ekin_particle;
+                    particle_type_out = particle_type;
+                } else {
+                    // this would be the energy of the primary particle - equal to
+                    // deposited energy only if it is completely contained in the sensitive volume
+                    // energy = ekin_particle * 1000;
+                    energy = energyDep;
+                    if (energyDep_NR>0) particle_type_out = is_NR(*pdgID_hits, int(1.e9));
+                    else particle_type_out = (*pdgID_hits)[0];  // this will tell us if the deposit was
+                                                                // started by a photon or an electron
+                }
+                // DEBUG
+                //cout<<"energyDep_NR = "<<energyDep_NR<<endl;
+                //cout<<"particle_type_out = "<<particle_type_out<<endl;
+                
+                //particle_type_out = -999;
+                //energy = -1;
+                cut_energy      = -1;
+                theta           =  0;
+                phi             =  0;
+                track_length_3D = -1;
+                proj_track_2D   = -1;
+                x_vertex        = -1;
+                y_vertex        = -1;
+                z_vertex        = -1;
+                x_vertex_end    = -1;
+                y_vertex_end    = -1;
+                z_vertex_end    = -1;
+                x_min           = -1;
+                x_max           = -1;
+                y_min           = -1;
+                y_max           = -1;
+                z_min           = -1;
+                z_max           = -1;
+                N_photons       =  0;
+                x_min_cut       = -1;
+                x_max_cut       = -1;
+                y_min_cut       = -1;
+                y_max_cut       = -1;
+                z_min_cut       = -1;
+                z_max_cut       = -1;
+                N_photons_cut   =  0;
+                proj_track_2D_cut = -1;
+                px    = 0;
+                py    = 0;
+                pz    = 0;
+                nhits_og = numhits;
+                
+                
+                TH2I background;
+                AddBckg(options, entry, background);
+                
+                if (energy < options["ion_pot"]){
+                    energy = 0;
+                    TH2I final_image = background;
+                    
+                    outtree->Fill();
+                    gDirectory->cd();
+                    final_image.Write();
+                    
                     continue;
                 }
-                
-                TH2F background;
-                AddBckg(options, entry, background);
                 
                 
                 
@@ -413,6 +487,7 @@ int main(int argc, char** argv)
                 
                 
                 outtree->Fill();
+                
                 gDirectory->cd();
                 
                 // DEBUG
@@ -555,8 +630,8 @@ void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile)
         // DEBUG
         // cout<<key<<": "<<val<<endl;
         
-        if(key!="tag"       and key !="Vig_Map" and
-           key!="bckg_path" and key !="ped_cloud_dir" and
+        if(key!="tag"       && key !="Vig_Map" &&
+           key!="bckg_path" && key !="ped_cloud_dir" &&
            key!="NR_list"
            )
         {
@@ -575,7 +650,7 @@ void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile)
     return;
 }
 
-void AddBckg(map<string,string>& options, int entry, TH2F& background) {
+void AddBckg(map<string,string>& options, int entry, TH2I& background) {
     
     string tmpfolder = options["bckg_path"];
     int x_pix = stoi(options["x_pix"]);
@@ -637,7 +712,7 @@ void AddBckg(map<string,string>& options, int entry, TH2F& background) {
                 if(counter == pic_index) {
                     cygnolib::Picture pic=cygnolib::daq_cam2pic(event, "fusion");
                     
-                    TH2F rootpic(Form("pic_run1_ev%d", entry) , Form("pic_run1_ev%d", entry) , x_pix, -0.5, x_pix-0.5, y_pix, -0.5, y_pix-0.5);
+                    TH2I rootpic(Form("pic_run1_ev%d", entry) , Form("pic_run1_ev%d", entry) , x_pix, -0.5, x_pix-0.5, y_pix, -0.5, y_pix-0.5);
                     
                     vector<vector<uint16_t>> vecpic = pic.GetFrame();
                     for(unsigned int i = 0; i<vecpic.size(); i++) {
@@ -663,6 +738,18 @@ void AddBckg(map<string,string>& options, int entry, TH2F& background) {
     }
     
     return;
+}
+
+
+bool is_NR(vector<int> pdgID_hits, int pdg) {
+    int ret = -999;
+    for(unsigned int i = 0; i<pdgID_hits.size(); i++) {
+        if(pdgID_hits[i] > pdg) {
+            ret = pdgID_hits[i];
+            break;
+        }
+    }
+    return ret;
 }
 
 // Old approach:
