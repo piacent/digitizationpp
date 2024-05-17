@@ -40,7 +40,12 @@ void ReadIonlist(string name, vector<vector<string>>& ionlist);
 void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile);
 int NelGEM2(const vector<double>& energyDep,const vector<double>& z_hit, map<string,string>& options);
 
-void AddBckg(map<string,string>& options, int entry, TH2F& background);
+void AddBckg(map<string,string>& options, int entry, TH2I& background);
+
+bool is_NR(vector<int> pdgID_hits, int pdg);
+double angle_between(vector<double>& v1, vector<double>& v2);
+vector<double> crossProduct(vector<double>& a, vector<double>& b);
+vector<double> rotateByAngleAndAxis(vector<double>& vec, double angle, vector<double>& axis);
 
 // Old approach
 //string rootlocation(string tag, int run);   // inconsistency for the MC-old tag!!!
@@ -145,7 +150,7 @@ int main(int argc, char** argv)
             
             vector<vector<string>> SRIM_events;
             
-            if(options["NR"]=="True" and options["NR_list"]!="") {
+            if(options["NR"]=="True" && options["NR_list"]!="") {
                 auto delim1 = filename.find("part");
                 auto delim2 = filename.find(".root");
                 if(delim1==string::npos) throw runtime_error("Cannot determine the 'part' of the file.\n");
@@ -332,6 +337,7 @@ int main(int argc, char** argv)
             Int_t numhits;
             Double_t energyDep;
             Double_t energyDep_NR;
+            Float_t  ekin_particle;
             Int_t particle_type;
             vector<int>    *pdgID_hits = 0;
             vector<double> *tracklen_hits = 0;
@@ -347,7 +353,7 @@ int main(int argc, char** argv)
             inputtree->SetBranchAddress("eventnumber", &eventnumber);
             inputtree->SetBranchAddress("numhits", &numhits);
             
-            if(options["SRIM"]=="False") { // TO BE CHECK ON REAL SRIM SIMULATIONS
+            if(options["NR"]=="False") { // TO BE CHECK ON REAL SRIM SIMULATIONS
                 inputtree->SetBranchAddress("energyDep",    &energyDep);
                 inputtree->SetBranchAddress("energyDep_NR", &energyDep_NR);
                 inputtree->SetBranchAddress("pdgID_hits",    &pdgID_hits);
@@ -364,6 +370,7 @@ int main(int argc, char** argv)
             
             if(options["NR"]=="True") { // TO BE CHECK ON REAL SRIM SIMULATIONS
                 inputtree->SetBranchAddress("particle_type", &particle_type);
+                inputtree->SetBranchAddress("ekin_particle", &ekin_particle);
             }
             
             unique_ptr<TH2F> VignMap;
@@ -396,23 +403,155 @@ int main(int argc, char** argv)
                 //    }
                 //}
                 
-                //cout<<"Entry "<<entry<<" of "<<totev<<endl;
-                //cout<<"Energy "<<energyDep<<" keV"<<endl;
+                cout<<"Entry "<<entry<<" of "<<totev<<endl;
                 
-                if (energyDep>200) {
+                if (options["NR"]=="True"){
+                    cout<<"Energy "<<ekin_particle<<" keV"<<endl;
+                } else {
+                    cout<<"Energy "<<energyDep    <<" keV"<<endl;
+                }
+                
+                if(options["NR"]=="False" && energyDep>900    ) continue;
+                if(options["NR"]=="True"  && ekin_particle>900) continue;
+                
+                //initialize array values - to save info also if the track is skipped (background only)
+                row_cut         = -1;
+                eventnumber_out = eventnumber;
+                
+                // FIXME: [???]
+                if(options["NR"] == "True") {
+                    energy            = ekin_particle;
+                    particle_type_out = particle_type;
+                } else {
+                    // this would be the energy of the primary particle - equal to
+                    // deposited energy only if it is completely contained in the sensitive volume
+                    // energy = ekin_particle * 1000;
+                    energy = energyDep;
+                    if (energyDep_NR>0) particle_type_out = is_NR(*pdgID_hits, int(1.e9));
+                    else particle_type_out = (*pdgID_hits)[0];  // this will tell us if the deposit was
+                    // started by a photon or an electron
+                }
+                // DEBUG
+                //cout<<"energyDep_NR = "<<energyDep_NR<<endl;
+                //cout<<"particle_type_out = "<<particle_type_out<<endl;
+                
+                //particle_type_out = -999;
+                //energy = -1;
+                cut_energy      = -1;
+                theta           =  0;
+                phi             =  0;
+                track_length_3D = -1;
+                proj_track_2D   = -1;
+                x_vertex        = -1;
+                y_vertex        = -1;
+                z_vertex        = -1;
+                x_vertex_end    = -1;
+                y_vertex_end    = -1;
+                z_vertex_end    = -1;
+                x_min           = -1;
+                x_max           = -1;
+                y_min           = -1;
+                y_max           = -1;
+                z_min           = -1;
+                z_max           = -1;
+                N_photons       =  0;
+                x_min_cut       = -1;
+                x_max_cut       = -1;
+                y_min_cut       = -1;
+                y_max_cut       = -1;
+                z_min_cut       = -1;
+                z_max_cut       = -1;
+                N_photons_cut   =  0;
+                proj_track_2D_cut = -1;
+                px    = 0;
+                py    = 0;
+                pz    = 0;
+                nhits_og = numhits;
+                
+                
+                TH2I background;
+                AddBckg(options, entry, background);
+                
+                if (energy < stod(options["ion_pot"])){
+                    energy = 0;
+                    TH2I final_image = background;
+                    
+                    outtree->Fill();
+                    gDirectory->cd();
+                    final_image.Write();
+                    
                     continue;
                 }
                 
-                TH2F background;
-                AddBckg(options, entry, background);
+                vector<double> x_hits_tr;
+                vector<double> y_hits_tr;
+                vector<double> z_hits_tr;
                 
+
+                if (options["NR"]=="True") { // FIXME: TO BE CHECKED!!!!!
+                    // x_hits_tr = np.array(tree.x_hits) + opt.x_offset
+                    // y_hits_tr = np.array(tree.y_hits) + opt.y_offset
+                    // z_hits_tr = np.array(tree.z_hits) + opt.z_offset
+                    vector<double> v1 = {1.,0.,0.};
+                    vector<double> v2 = {stod(SRIM_events[entry][3])-stod(SRIM_events[entry][2]),
+                                         stod(SRIM_events[entry][5])-stod(SRIM_events[entry][4]),
+                                         stod(SRIM_events[entry][7])-stod(SRIM_events[entry][6]),
+                                        };
+                    
+                    double        angle = angle_between(v1, v2);
+                    vector<double> axis =  crossProduct(v1, v2);
+                    
+                    // DEBUG
+                    //std::cout<<angle<<endl;
+                    //std::cout<<"-"<<axis[0]<<","<<axis[1]<<","<<axis[2]<<endl;
+                    
+                    
+                    for(unsigned int ihit=0; ihit < numhits; ihit++) {
+                        vector<double> tmpvec = {(*x_hits)[ihit], (*y_hits)[ihit], (*z_hits)[ihit]};
+                        vector<double> rotvec = rotateByAngleAndAxis(tmpvec, angle, axis);
+                        
+                        x_hits_tr.push_back(rotvec[0]+stod(SRIM_events[entry][2])+stod(options["x_offset"]));
+                        y_hits_tr.push_back(rotvec[1]+stod(SRIM_events[entry][4])+stod(options["y_offset"]));
+                        z_hits_tr.push_back(rotvec[2]+stod(SRIM_events[entry][6])+stod(options["z_offset"]));
+                    }
+                    
+                } else {
+                    transform(z_hits->begin(),
+                              z_hits->end(),
+                              back_inserter(x_hits_tr),
+                              [&] (double a) {return a + stod(options["x_offset"]);});
+                    transform(y_hits->begin(),
+                              y_hits->end(),
+                              back_inserter(y_hits_tr),
+                              [&] (double a) {return a + stod(options["y_offset"]);});
+                    transform(x_hits->begin(),
+                              x_hits->end(),
+                              back_inserter(z_hits_tr),
+                              [&] (double a) {return a + stod(options["z_offset"]);});
+                }
+
+                // DEBUG
+                //for(int ihit=0; ihit < numhits; ihit++) {
+                //    cout<<x_hits_tr[ihit]<<",";
+                //    cout<<y_hits_tr[ihit]<<",";
+                //    cout<<z_hits_tr[ihit]<<"\n";
+                //}
                 
+                vector<double> energy_hits = (*energyDep_hits);
                 
-                
-                eventnumber_out = eventnumber;
+                // add random Z to tracks
+                if (stod(options["randZ_range"]) != 0) {
+                    double rand = (gRandom->Uniform() - 0.5) * stod(options["randZ_range"]);
+                    //DEBUG
+                    //cout<<"rand = "<<rand<<endl;
+                    for(int ihit=0; ihit<numhits; ihit++) {
+                        z_hits_tr[ihit] += rand;
+                    }
+                }
                 
                 
                 outtree->Fill();
+                
                 gDirectory->cd();
                 
                 // DEBUG
@@ -555,8 +694,8 @@ void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile)
         // DEBUG
         // cout<<key<<": "<<val<<endl;
         
-        if(key!="tag"       and key !="Vig_Map" and
-           key!="bckg_path" and key !="ped_cloud_dir" and
+        if(key!="tag"       && key !="Vig_Map" &&
+           key!="bckg_path" && key !="ped_cloud_dir" &&
            key!="NR_list"
            )
         {
@@ -575,7 +714,7 @@ void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile)
     return;
 }
 
-void AddBckg(map<string,string>& options, int entry, TH2F& background) {
+void AddBckg(map<string,string>& options, int entry, TH2I& background) {
     
     string tmpfolder = options["bckg_path"];
     int x_pix = stoi(options["x_pix"]);
@@ -637,7 +776,7 @@ void AddBckg(map<string,string>& options, int entry, TH2F& background) {
                 if(counter == pic_index) {
                     cygnolib::Picture pic=cygnolib::daq_cam2pic(event, "fusion");
                     
-                    TH2F rootpic(Form("pic_run1_ev%d", entry) , Form("pic_run1_ev%d", entry) , x_pix, -0.5, x_pix-0.5, y_pix, -0.5, y_pix-0.5);
+                    TH2I rootpic(Form("pic_run1_ev%d", entry) , Form("pic_run1_ev%d", entry) , x_pix, -0.5, x_pix-0.5, y_pix, -0.5, y_pix-0.5);
                     
                     vector<vector<uint16_t>> vecpic = pic.GetFrame();
                     for(unsigned int i = 0; i<vecpic.size(); i++) {
@@ -664,6 +803,73 @@ void AddBckg(map<string,string>& options, int entry, TH2F& background) {
     
     return;
 }
+
+
+bool is_NR(vector<int> pdgID_hits, int pdg) {
+    int ret = -999;
+    for(unsigned int i = 0; i<pdgID_hits.size(); i++) {
+        if(pdgID_hits[i] > pdg) {
+            ret = pdgID_hits[i];
+            break;
+        }
+    }
+    return ret;
+}
+
+// Returns the angle in radians between vectors 'v1' and 'v2'
+// >>> angle_between((1, 0, 0), (0, 1, 0))
+// 1.5707963267948966
+// >>> angle_between((1, 0, 0), (1, 0, 0))
+// 0.0
+// >>> angle_between((1, 0, 0), (-1, 0, 0))
+// 3.141592653589793
+
+double angle_between(vector<double>& v1, vector<double>& v2) {
+    if (v2.size() != 3 || v1.size() != 3) {
+        throw std::invalid_argument("angle_between: Both input vectors must have exactly 3 elements.");
+    }
+    
+    double dot    = v1[0]*v2[0]+v1[1]*v2[1]+v1[2]*v2[2];
+    double lenSq1 = v1[0]*v1[0]+v1[1]*v1[1]+v1[2]*v1[2];
+    double lenSq2 = v2[0]*v2[0]+v2[1]*v2[1]+v2[2]*v2[2];
+    
+    //DEBUG
+    //cout<<"~"<<dot<<","<<lenSq1<<","<<lenSq2<<endl;
+    
+    double angle = acos(dot/sqrt(lenSq1 * lenSq2));
+    return angle;
+}
+
+vector<double> crossProduct(vector<double>& a, vector<double>& b) {
+    if (a.size() != 3 || b.size() != 3) {
+        throw std::invalid_argument("crossProduct: Both input vectors must have exactly 3 elements.");
+    }
+    vector<double> result(3);
+    result[0] = a[1] * b[2] - a[2] * b[1];
+    result[1] = a[2] * b[0] - a[0] * b[2];
+    result[2] = a[0] * b[1] - a[1] * b[0];
+    return result;
+}
+
+
+vector<double> rotateByAngleAndAxis(vector<double>& vec, double angle, vector<double>& axis) {
+    if (vec.size() != 3 || axis.size() != 3) {
+        throw std::invalid_argument("rotateByAngleAndAxis: Both input vectors must have exactly 3 elements.");
+    }
+    
+    // v_rot = (costheta)v + (sintheta)(axis x v) + (1-cos(theta)) (axis dot v) axis
+    vector<double> result(3);
+    
+    vector<double> axisXvec = crossProduct(axis, vec);
+    double axisDOTvec       = inner_product(axis.begin(), axis.end(), vec.begin(), 0);
+    
+    result[0] = cos(angle) * vec[0] + sin(angle) * axisXvec[0] + (1.-cos(angle))*axisDOTvec*axis[0];
+    result[1] = cos(angle) * vec[1] + sin(angle) * axisXvec[1] + (1.-cos(angle))*axisDOTvec*axis[1];
+    result[2] = cos(angle) * vec[2] + sin(angle) * axisXvec[2] + (1.-cos(angle))*axisDOTvec*axis[2];
+    
+    return result;
+}
+
 
 // Old approach:
 //string rootlocation(string tag, int run){
