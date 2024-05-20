@@ -509,7 +509,7 @@ int main(int argc, char** argv)
                     //std::cout<<"-"<<axis[0]<<","<<axis[1]<<","<<axis[2]<<endl;
                     
                     
-                    for(unsigned int ihit=0; ihit < numhits; ihit++) {
+                    for(int ihit=0; ihit < numhits; ihit++) {
                         vector<double> tmpvec = {(*x_hits)[ihit], (*y_hits)[ihit], (*z_hits)[ihit]};
                         vector<double> rotvec = rotateByAngleAndAxis(tmpvec, angle, uaxis);
                         
@@ -552,6 +552,44 @@ int main(int argc, char** argv)
                               );
                     
                 }
+                
+                //Compute length and extremes of the track before the cut
+                proj_track_2D = 0;
+                for(int ihit=0; ihit < numhits-1; ihit++){
+                    proj_track_2D += sqrt((x_hits_tr[ihit+1]-x_hits_tr[ihit])*(x_hits_tr[ihit+1]-x_hits_tr[ihit])+
+                                          (y_hits_tr[ihit+1]-y_hits_tr[ihit])*(y_hits_tr[ihit+1]-y_hits_tr[ihit])
+                                          );
+                }
+                // DEBUG
+                //cout<<"proj_track_2D = "<<Form("%.10f", proj_track_2D)<<endl;
+                
+                
+                x_vertex = (x_hits_tr[0] + 0.5 * stod(options["x_dim"]) )*stod(options["x_pix"])/stod(options["x_dim"]); //in pixels
+                y_vertex = (y_hits_tr[0] + 0.5 * stod(options["y_dim"]) )*stod(options["y_pix"])/stod(options["y_dim"]); //in pixels
+                z_vertex = abs(z_hits_tr[0]-stod(options["z_gem"])); //distance from GEMs in mm
+                // DEBUG
+                //cout<<"x_vertex = "<<x_vertex<<" ### y_vertex = "<<y_vertex<<" ### z_vertex = "<<z_vertex<<endl;
+                
+                x_vertex_end = (x_hits_tr[numhits-1] + 0.5 * stod(options["x_dim"])) * stod(options["x_pix"]) / stod(options["x_dim"]); //in pixels
+                y_vertex_end = (y_hits_tr[numhits-1] + 0.5 * stod(options["y_dim"])) * stod(options["y_pix"]) / stod(options["y_dim"]); //in pixels
+                z_vertex_end = abs(z_hits_tr[numhits-1]-stod(options["z_gem"])); //distance from GEMs in mm
+                //DEBUG
+                //cout<<"x_vertex_end = "<<x_vertex_end<<" ### y_vertex_end = "<<y_vertex_end<<" ### z_vertex_end = "<<z_vertex_end<<endl;
+                
+                x_min = (*min_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * stod(options["x_dim"])) * stod(options["x_pix"]) / stod(options["x_dim"]);
+                x_max = (*max_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * stod(options["x_dim"])) * stod(options["x_pix"]) / stod(options["x_dim"]);
+                y_min = (*min_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * stod(options["y_pix"]) / stod(options["y_dim"]);
+                y_max = (*max_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * stod(options["y_pix"]) / stod(options["y_dim"]);
+                z_min = min(abs(*max_element(z_hits_tr.begin(),
+                                               z_hits_tr.end()) - stod(options["z_gem"])),
+                            abs(*min_element(z_hits_tr.begin(),
+                                             z_hits_tr.end()) - stod(options["z_gem"])));
+                z_max = max(abs(*max_element(z_hits_tr.begin(),
+                                             z_hits_tr.end()) - stod(options["z_gem"])),
+                            abs(*min_element(z_hits_tr.begin(),
+                                             z_hits_tr.end()) - stod(options["z_gem"])));
+                //DEBUG
+                //cout<<" x_min = "<<x_min<<" x_max = "<<x_max<<" y_min = "<<y_min<<" y_max = "<<y_max<<" z_min = "<<z_min<<" z_max = "<<z_max;
                 
                 
                 outtree->Fill();
@@ -755,7 +793,7 @@ void AddBckg(map<string,string>& options, int entry, TH2I& background) {
         
         int pic_index = gRandom->Integer(100);
         // DEBUG
-        // pic_index = 0;
+        pic_index = 0;
         
         // DEBUG
         cout<<"Using pic # "<<pic_index<<" as a pedestal..."<<endl;
