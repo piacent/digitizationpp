@@ -62,7 +62,7 @@ namespace cygnolib {
     }
     void Picture::SavePng(std::string filename, int vmin, int vmax) {
         cv::Mat mat;
-        mat.create(nrows, ncolumns, CV_16U); 
+        mat.create(nrows, ncolumns, CV_16U);
         for (unsigned int r = 0; r < nrows; ++r) {
             for (unsigned int c = 0; c < ncolumns; ++c) {
                 uint16_t tmp = frame[r][c];
@@ -190,7 +190,7 @@ namespace cygnolib {
             baseidx += length_i;
             
             std::vector<std::vector<std::vector<uint16_t>>> tmp(fDGH->nwaveforms[i],
-                                                            std::vector<std::vector<uint16_t>>(fDGH->nchannels[i], 
+                                                            std::vector<std::vector<uint16_t>>(fDGH->nchannels[i],
                                                             std::vector<uint16_t>(fDGH->nsamples[i], 0)
                                                             )
                                                            );
@@ -240,14 +240,14 @@ namespace cygnolib {
         unsigned int Nch = 8;
         std::vector<double> avgs(Nch, 0.0);
         for(unsigned int ch=0; ch<Nch; ch++){
-            avgs[ch] = std::accumulate(wfs[ch].begin(), wfs[ch].end(), 0.0) / NS; // averages of each channel 
+            avgs[ch] = std::accumulate(wfs[ch].begin(), wfs[ch].end(), 0.0) / NS; // averages of each channel
         }
         for(unsigned int i =1; i<NS; i++) {
             int offset      = 0;
             int offset_plus = 0;
             
             for(unsigned int ch=0; ch<Nch; ch++){
-                if(i ==1) {                          
+                if(i ==1) {
                     if ((wfs[ch][2] - wfs[ch][1])>30) {
                         offset += 1;
                     } else {
@@ -316,7 +316,7 @@ namespace cygnolib {
                             } else {
                                 if (i == (NS-2)){
                                     wfs[ch][NS-2] = wfs[ch][NS-3];
-                                    wfs[ch][NS-2] = wfs[ch][NS-1-3];                 
+                                    wfs[ch][NS-2] = wfs[ch][NS-1-3];
                                 } else {
                                     wfs[ch][i]   = int((wfs[ch][i+2]+wfs[ch][i-1])/2);
                                     wfs[ch][i+1] = int((wfs[ch][i+2]+wfs[ch][i-1])/2);
@@ -336,7 +336,7 @@ namespace cygnolib {
                 }
             }
         }
-    }  
+    }
     void PMTData::ApplyDRS4Corrections(std::vector<float> *channel_offsets,
                                        std::vector<std::vector<int>> *table_cell,
                                        std::vector<std::vector<int>> *table_nsample) {
@@ -407,7 +407,7 @@ namespace cygnolib {
     MVOdb* GetODBDumpBOR(TMidasEvent &event,  MVOdbError *odberror) {
         if ((event.GetEventId() & 0xFFFF) != 0x8000) {
             throw std::runtime_error("cygnolib::GetODBDumpBOR: event is not a begin of run ODB dump.");
-        } 
+        }
         return MakeFileDumpOdb(event.GetData(),event.GetDataSize(), odberror);
     }
     
@@ -522,7 +522,7 @@ namespace cygnolib {
         void *pdata = 0;
         event.FindBank(bname.c_str(), &bankLength, &bankType, &pdata);
         uint16_t *pdatacast = (uint16_t *)pdata; //recast to bank type to increment
-        std::vector<std::vector<uint16_t>> frame(rows, std::vector<uint16_t>(columns,0)); 
+        std::vector<std::vector<uint16_t>> frame(rows, std::vector<uint16_t>(columns,0));
         for(int i=0; i<rows; i++) {
             for (int j=0; j<columns;j++) {
                 frame[i][j] = *pdatacast;
@@ -571,4 +571,3 @@ namespace cygnolib {
     }
     
 }
-

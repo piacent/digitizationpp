@@ -18,8 +18,8 @@
 #include <curl/curl.h>
 
 namespace s3 {
-    std::string BUCKET_POSIX_PATH = "/jupyter-workspace/cloud-storage/";
-    std::string BUCKET_REST_PATH = "https://s3.cloud.infn.it/v1/AUTH_2ebf769785574195bde2ff418deac08a/";
+    std::string BUCKET_POSIX_PATH = "/jupyter-workspace/cloud-storage/"; ///< Bucket Posix path on the cloud
+    std::string BUCKET_REST_PATH = "https://s3.cloud.infn.it/v1/AUTH_2ebf769785574195bde2ff418deac08a/"; ///< Bucket rest path on the cloud
 
     std::string mid_file(int run, std::string tag, bool cloud, bool verbose) {
         std::stringstream ss;
@@ -45,16 +45,10 @@ namespace s3 {
       return written;
     }
     std::string cache_file(std::string fname,
-                           std::string path, 
+                           std::string path,
                            bool        cloud,
                            std::string tag,
                            bool      verbose) {
-        
-        // DEBUG
-        // std::cout<<"============================="<<std::endl;
-        // std::cout<<"DEBUG: "<<path<<std::endl;
-        // std::cout<<"DEBUG: "<<tag<<std::endl;
-        // std::cout<<"============================="<<std::endl;
         
         std::string return_name;
         
@@ -85,9 +79,9 @@ namespace s3 {
                 FILE *pagefile;
                 curl_global_init(CURL_GLOBAL_ALL);
 
-                // init the curl session 
+                // init the curl session
                 curl_handle = curl_easy_init();
-                // set URL to get here 
+                // set URL to get here
                 curl_easy_setopt(curl_handle, CURLOPT_URL, fname.c_str());
                 // Switch on full protocol/debug output while testing
                 if (verbose) curl_easy_setopt(curl_handle, CURLOPT_VERBOSE, 1L);
@@ -95,7 +89,7 @@ namespace s3 {
                 curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 0L);
                 // send all data to this function
                 curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_data);
-                // open the file 
+                // open the file
                 pagefile = fopen(tmpname.c_str(), "wb");
                 if(pagefile) {
                     // write the page body to this file handle
