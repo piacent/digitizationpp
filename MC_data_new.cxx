@@ -547,9 +547,10 @@ int main(int argc, char** argv)
                     double rand = (gRandom->Uniform() - 0.5) * stod(options["randZ_range"]);
                     //DEBUG
                     //cout<<"rand = "<<rand<<endl;
-                    for(int ihit=0; ihit<numhits; ihit++) {
-                        z_hits_tr[ihit] += rand;
-                    }
+                    transform(z_hits_tr.begin(), z_hits_tr.end(), z_hits_tr.begin(),
+                              [&] (double a) {return a + rand;}
+                              );
+                    
                 }
                 
                 
@@ -753,6 +754,8 @@ void AddBckg(map<string,string>& options, int entry, TH2I& background) {
         }
         
         int pic_index = gRandom->Integer(100);
+        // DEBUG
+        // pic_index = 0;
         
         // DEBUG
         cout<<"Using pic # "<<pic_index<<" as a pedestal..."<<endl;
