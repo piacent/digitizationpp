@@ -36,3 +36,5 @@ debug
 OutDir
 *.DS_Store
 tmp
+doc/html
+doc/latex

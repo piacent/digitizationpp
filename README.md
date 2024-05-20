@@ -13,6 +13,7 @@ Digitization code in C++
 Before compiling, set the variables ROOTANASYS and OPENCVSYS in your environment:
 
 `export ROOTANASYS="/path/to/rootana/installation/"`
+
 `export OPENCVSYS="/path/to/opencv/installation/"`
 
 
@@ -29,6 +30,14 @@ Before compiling, set the variables ROOTANASYS and OPENCVSYS in your environment
 `cmake ..`
 
 `cmake --build .`
+
+
+
+Generate documentation inside the `doc/html` folder:
+
+`doxygen doc/doxygen.cfg`
+
+Documentation should be then available at `doc/html/index.html`.
 
 ## Suggested usage
 
