@@ -143,8 +143,8 @@ int main(int argc, char** argv)
         if(ends) {
             
             //DEBUG
-            //if(filename.find("HeCF4gas_AmBe_part") != string::npos) {
-            if(filename.find("LIME_CADshield") != string::npos) {
+            if(filename.find("HeCF4gas_AmBe_part") != string::npos) {
+            //if(filename.find("LIME_CADshield") != string::npos) {
                 continue;
             }
             
@@ -509,7 +509,7 @@ int main(int argc, char** argv)
                     //std::cout<<"-"<<axis[0]<<","<<axis[1]<<","<<axis[2]<<endl;
                     
                     
-                    for(unsigned int ihit=0; ihit < numhits; ihit++) {
+                    for(int ihit=0; ihit < numhits; ihit++) {
                         vector<double> tmpvec = {(*x_hits)[ihit], (*y_hits)[ihit], (*z_hits)[ihit]};
                         vector<double> rotvec = rotateByAngleAndAxis(tmpvec, angle, uaxis);
                         
@@ -547,9 +547,128 @@ int main(int argc, char** argv)
                     double rand = (gRandom->Uniform() - 0.5) * stod(options["randZ_range"]);
                     //DEBUG
                     //cout<<"rand = "<<rand<<endl;
-                    for(int ihit=0; ihit<numhits; ihit++) {
-                        z_hits_tr[ihit] += rand;
+                    transform(z_hits_tr.begin(), z_hits_tr.end(), z_hits_tr.begin(),
+                              [&] (double a) {return a + rand;}
+                              );
+                    
+                }
+                
+                //Compute length and extremes of the track before the cut
+                proj_track_2D = 0;
+                for(int ihit=0; ihit < numhits-1; ihit++){
+                    proj_track_2D += sqrt((x_hits_tr[ihit+1]-x_hits_tr[ihit])*(x_hits_tr[ihit+1]-x_hits_tr[ihit])+
+                                          (y_hits_tr[ihit+1]-y_hits_tr[ihit])*(y_hits_tr[ihit+1]-y_hits_tr[ihit])
+                                          );
+                }
+                // DEBUG
+                //cout<<"proj_track_2D = "<<Form("%.10f", proj_track_2D)<<endl;
+                
+                
+                x_vertex = (x_hits_tr[0] + 0.5 * stod(options["x_dim"]) )*stod(options["x_pix"])/stod(options["x_dim"]); //in pixels
+                y_vertex = (y_hits_tr[0] + 0.5 * stod(options["y_dim"]) )*stod(options["y_pix"])/stod(options["y_dim"]); //in pixels
+                z_vertex = abs(z_hits_tr[0]-stod(options["z_gem"])); //distance from GEMs in mm
+                // DEBUG
+                //cout<<"x_vertex = "<<x_vertex<<" ### y_vertex = "<<y_vertex<<" ### z_vertex = "<<z_vertex<<endl;
+                
+                x_vertex_end = (x_hits_tr[numhits-1] + 0.5 * stod(options["x_dim"])) * stod(options["x_pix"]) / stod(options["x_dim"]); //in pixels
+                y_vertex_end = (y_hits_tr[numhits-1] + 0.5 * stod(options["y_dim"])) * stod(options["y_pix"]) / stod(options["y_dim"]); //in pixels
+                z_vertex_end = abs(z_hits_tr[numhits-1]-stod(options["z_gem"])); //distance from GEMs in mm
+                //DEBUG
+                //cout<<"x_vertex_end = "<<x_vertex_end<<" ### y_vertex_end = "<<y_vertex_end<<" ### z_vertex_end = "<<z_vertex_end<<endl;
+                
+                x_min = (*min_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * stod(options["x_dim"])) * stod(options["x_pix"]) / stod(options["x_dim"]);
+                x_max = (*max_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * stod(options["x_dim"])) * stod(options["x_pix"]) / stod(options["x_dim"]);
+                y_min = (*min_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * stod(options["y_pix"]) / stod(options["y_dim"]);
+                y_max = (*max_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * stod(options["y_pix"]) / stod(options["y_dim"]);
+                z_min = min(abs(*max_element(z_hits_tr.begin(),
+                                               z_hits_tr.end()) - stod(options["z_gem"])),
+                            abs(*min_element(z_hits_tr.begin(),
+                                             z_hits_tr.end()) - stod(options["z_gem"])));
+                z_max = max(abs(*max_element(z_hits_tr.begin(),
+                                             z_hits_tr.end()) - stod(options["z_gem"])),
+                            abs(*min_element(z_hits_tr.begin(),
+                                             z_hits_tr.end()) - stod(options["z_gem"])));
+                //DEBUG
+                //cout<<" x_min = "<<x_min<<" x_max = "<<x_max<<" y_min = "<<y_min<<" y_max = "<<y_max<<" z_min = "<<z_min<<" z_max = "<<z_max;
+                
+                
+                //CUT TRACKS due to exposure of camera
+                double randcut = gRandom->Uniform(stod(options["exposure_time"])+stod(options["readout_time"]));
+                //randcut = 390.0;
+                
+                if (options["exposure_time_effect"] == "True") {
+                    if (randcut<stod(options["readout_time"])) {
+                        
+                        double y_cut_tmp = stod(options["y_dim"]) * (0.5 - randcut/stod(options["readout_time"]))-3.;
+                        
+                        // Removing elements from x_hits_tr
+                        x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
+                            return y_hits_tr[&x-&*x_hits_tr.begin()] < y_cut_tmp;
+                        }), x_hits_tr.end());
+                        // Removing elements from z_hits_tr
+                        z_hits_tr.erase(std::remove_if(z_hits_tr.begin(), z_hits_tr.end(), [&](const double& z) {
+                            return y_hits_tr[&z-&*z_hits_tr.begin()] < y_cut_tmp;
+                        }), z_hits_tr.end());
+                        // Removing elements from energy_hits
+                        energy_hits.erase(std::remove_if(energy_hits.begin(), energy_hits.end(), [&](const double& e) {
+                            return y_hits_tr[&e-&*energy_hits.begin()] < y_cut_tmp;
+                        }), energy_hits.end());
+                        
+                        // Removing elements from y_hits_tr [must be done after the previous ones]
+                        y_hits_tr.erase(std::remove_if(y_hits_tr.begin(), y_hits_tr.end(),[&](const double& y) {
+                            return y < y_cut_tmp;
+                        }), y_hits_tr.end());
+                        
+                        row_cut = stoi(options["y_pix"]) - (int)(randcut * stod(options["y_pix"]) / stod(options["readout_time"]));
+                        
+                        //DEBUG
+                        //cout<<"y_cut_tmp = "<<y_cut_tmp<<endl;
+                        //cout<<"row_cut = "<<row_cut<<endl;
+                        //cout<<"sizes = ["<< x_hits_tr.size()<<","<<y_hits_tr.size()<<","
+                        //    <<z_hits_tr.size()<<","<<energy_hits.size()<<"]"<<endl;
+                        
+                    } else if (randcut>stod(options["exposure_time"])) {
+                        double y_cut_tmp = stod(options["y_dim"]) * (0.5 - (randcut - stod(options["exposure_time"])) / stod(options["readout_time"]))-3.;
+                        
+                        // Removing elements from x_hits_tr
+                        x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
+                            return y_hits_tr[&x-&*x_hits_tr.begin()] > y_cut_tmp;
+                        }), x_hits_tr.end());
+                        // Removing elements from z_hits_tr
+                        z_hits_tr.erase(std::remove_if(z_hits_tr.begin(), z_hits_tr.end(), [&](const double& z) {
+                            return y_hits_tr[&z-&*z_hits_tr.begin()] > y_cut_tmp;
+                        }), z_hits_tr.end());
+                        // Removing elements from energy_hits
+                        energy_hits.erase(std::remove_if(energy_hits.begin(), energy_hits.end(), [&](const double& e) {
+                            return y_hits_tr[&e-&*energy_hits.begin()] > y_cut_tmp;
+                        }), energy_hits.end());
+                        
+                        // Removing elements from y_hits_tr [must be done after the previous ones]
+                        y_hits_tr.erase(std::remove_if(y_hits_tr.begin(), y_hits_tr.end(),[&](const double& y) {
+                            return y > y_cut_tmp;
+                        }), y_hits_tr.end());
+                        
+                        row_cut = stoi(options["y_pix"]) - (int)((randcut-stod(options["readout_time"])) * stod(options["y_pix"]) / stod(options["readout_time"]));
+                        
+                        //DEBUG
+                        //cout<<"y_cut_tmp = "<<y_cut_tmp<<endl;
+                        //cout<<"row_cut = "<<row_cut<<endl;
+                        //cout<<"sizes = ["<< x_hits_tr.size()<<","<<y_hits_tr.size()<<","
+                        //    <<z_hits_tr.size()<<","<<energy_hits.size()<<"]"<<endl;
+                        
                     }
+                    if(x_hits_tr.size()==0){
+                        cout<<"The track was completely cut"<<endl;
+                        TH2I final_image = background;
+                        
+                        outtree->Fill();
+                        gDirectory->cd();
+                        final_image.Write();
+                        
+                        continue;
+                    }
+                    
+                    
                 }
                 
                 
@@ -753,6 +872,8 @@ void AddBckg(map<string,string>& options, int entry, TH2I& background) {
         }
         
         int pic_index = gRandom->Integer(100);
+        // DEBUG
+        //pic_index = 0;
         
         // DEBUG
         cout<<"Using pic # "<<pic_index<<" as a pedestal..."<<endl;
