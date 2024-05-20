@@ -501,6 +501,9 @@ int main(int argc, char** argv)
                     double        angle = angle_between(v1, v2);
                     vector<double> axis =  crossProduct(v1, v2);
                     
+                    
+                    double norm = sqrt(inner_product(axis.begin(), axis.end(), axis.begin(), 0.0));
+                    vector<double> uaxis = {axis[0]/norm, axis[1]/norm, axis[2]/norm};
                     // DEBUG
                     //std::cout<<angle<<endl;
                     //std::cout<<"-"<<axis[0]<<","<<axis[1]<<","<<axis[2]<<endl;
@@ -508,7 +511,7 @@ int main(int argc, char** argv)
                     
                     for(unsigned int ihit=0; ihit < numhits; ihit++) {
                         vector<double> tmpvec = {(*x_hits)[ihit], (*y_hits)[ihit], (*z_hits)[ihit]};
-                        vector<double> rotvec = rotateByAngleAndAxis(tmpvec, angle, axis);
+                        vector<double> rotvec = rotateByAngleAndAxis(tmpvec, angle, uaxis);
                         
                         x_hits_tr.push_back(rotvec[0]+stod(SRIM_events[entry][2])+stod(options["x_offset"]));
                         y_hits_tr.push_back(rotvec[1]+stod(SRIM_events[entry][4])+stod(options["y_offset"]));
@@ -829,9 +832,9 @@ double angle_between(vector<double>& v1, vector<double>& v2) {
         throw std::invalid_argument("angle_between: Both input vectors must have exactly 3 elements.");
     }
     
-    double dot    = v1[0]*v2[0]+v1[1]*v2[1]+v1[2]*v2[2];
-    double lenSq1 = v1[0]*v1[0]+v1[1]*v1[1]+v1[2]*v1[2];
-    double lenSq2 = v2[0]*v2[0]+v2[1]*v2[1]+v2[2]*v2[2];
+    double dot    = inner_product(v1.begin(), v1.end(), v2.begin(), 0.0);
+    double lenSq1 = inner_product(v1.begin(), v1.end(), v1.begin(), 0.0);
+    double lenSq2 = inner_product(v2.begin(), v2.end(), v2.begin(), 0.0);
     
     //DEBUG
     //cout<<"~"<<dot<<","<<lenSq1<<","<<lenSq2<<endl;
@@ -861,7 +864,7 @@ vector<double> rotateByAngleAndAxis(vector<double>& vec, double angle, vector<do
     vector<double> result(3);
     
     vector<double> axisXvec = crossProduct(axis, vec);
-    double axisDOTvec       = inner_product(axis.begin(), axis.end(), vec.begin(), 0);
+    double axisDOTvec       = inner_product(axis.begin(), axis.end(), vec.begin(), 0.0);
     
     result[0] = cos(angle) * vec[0] + sin(angle) * axisXvec[0] + (1.-cos(angle))*axisDOTvec*axis[0];
     result[1] = cos(angle) * vec[1] + sin(angle) * axisXvec[1] + (1.-cos(angle))*axisDOTvec*axis[1];
