@@ -51,6 +51,8 @@
 'sensor_size'           : 14.976,    # sensor dimension [mm] ORCA Fusion
 'camera_aperture'       : 0.95,
 'exposure_time_effect'  : True,      # if True simulates the effect of tracks cut by the sensor being not fully exposed
+'exposure_time'         : 300,       # exposure time in milliseconds
+'readout_time'          : 184.4,     # readout time of the camera in ms (184.4ms for ultra quiet scan)
 
 'bckg'                  : True,      # if 'True' background is added
 'NR'                    : True,      # 'True' for NR digitization, 'False' for ER
