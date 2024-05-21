@@ -6,6 +6,8 @@
 #include <map>
 #include <random>
 #include <string>
+#include <execution>
+#include <numeric>
 #include <algorithm>
 #include <cmath>
 #include <stdio.h>
@@ -66,6 +68,7 @@ void cloud_smearing3D(vector<double>& x_hits_tr,
                       vector<double>& S3D_z);
 
 vector<double> compute_sigma(const double diff_const, const double diff_coeff, const vector<double>& dz);
+vector<double> smear(const vector<double>& axis_hit, const vector<double>& axis_sigma, const vector<double>& nel);
 
 // Old approach
 //string rootlocation(string tag, int run);   // inconsistency for the MC-old tag!!!
@@ -1081,6 +1084,10 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
     vector<double> S3D_z;
     cloud_smearing3D(x_hits_tr, y_hits_tr, z_hits_tr, energy_hits, options, S3D_x, S3D_y, S3D_z);
     
+    // if there are no electrons on GEM3, just use empty image
+    if (S3D_x.size() == 0) return;
+    
+    
     return;
 }
 
@@ -1107,6 +1114,15 @@ void cloud_smearing3D(vector<double>& x_hits_tr,
     vector<double> sigma_y = compute_sigma(stod(options["diff_const_sigma0T"]), stod(options["diff_coeff_T"]), dz);
     vector<double> sigma_z = compute_sigma(stod(options["diff_const_sigma0L"]), stod(options["diff_coeff_L"]), dz);
     
+    S3D_x = smear(x_hits_tr, sigma_x, nel);
+    S3D_y = smear(y_hits_tr, sigma_y, nel);
+    S3D_z = smear(z_hits_tr, sigma_z, nel);
+    
+    // DEBUG
+    //for(unsigned int i=0; i<S3D_x.size(); i++) {
+    //    cout<<S3D_x[i]<<endl;
+    //}
+    
     return;
 }
 
@@ -1118,6 +1134,32 @@ vector<double> compute_sigma(const double diff_const, const double diff_coeff, c
     return sigmas;
 }
     
+vector<double> smear(const vector<double>& axis_hit, const vector<double>& axis_sigma, const vector<double>& nel) {
+    
+    int nelsum = accumulate(nel.begin(), nel.end(), 0);
+    
+    vector<double> X(nelsum, 0.0);
+    
+    // Create a vector of indices where each index i is repeated nel[i] times
+    vector<int> indices(nelsum);
+    vector<int> positions(axis_hit.size() + 1, 0);
+    
+    // Compute cumulative sum of nel to determine positions
+    partial_sum(nel.begin(), nel.end(), positions.begin() + 1);
+    
+    // Fill the indices vector
+    for_each(positions.begin(), positions.end() - 1, [&, i = 0](int pos) mutable {
+        fill(indices.begin() + pos, indices.begin() + positions[i + 1], i);
+        ++i;
+    });
+    
+    // Fill X with Gaussian-distributed values based on axis_hit and axis_sigma
+    transform(indices.begin(), indices.end(), X.begin(), [&](int i) {
+        return gRandom->Gaus(axis_hit[i], axis_sigma[i]);
+    });
+    
+    return X;
+}
 
 // Old approach:
 //string rootlocation(string tag, int run){
