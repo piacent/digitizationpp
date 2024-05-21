@@ -38,7 +38,9 @@ void ReadConfig(string name, map<string,string>& options);
 void ReadG4Isotopes(string name, map<string,string>& dict_isotopes);
 void ReadIonlist(string name, vector<vector<string>>& ionlist);
 void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile);
-int NelGEM2(const vector<double>& energyDep,const vector<double>& z_hit, map<string,string>& options);
+
+vector<double> NelGEM1(const vector<double>& N_ioniz_el);
+vector<double> NelGEM2(const vector<double>& energyDep,const vector<double>& z_hit, map<string,string>& options);
 
 void AddBckg(map<string,string>& options, int entry, TH2I& background);
 
@@ -46,6 +48,22 @@ bool is_NR(vector<int> pdgID_hits, int pdg);
 double angle_between(vector<double>& v1, vector<double>& v2);
 vector<double> crossProduct(vector<double>& a, vector<double>& b);
 vector<double> rotateByAngleAndAxis(vector<double>& vec, double angle, vector<double>& axis);
+
+void compute_cmos_with_saturation(vector<double>& x_hits_tr,
+                                  vector<double>& y_hits_tr,
+                                  vector<double>& z_hits_tr,
+                                  vector<double>& energy_hits,
+                                  map<string,string>& options,
+                                  vector<vector<double>>& array2d_Nph);
+
+void cloud_smearing3D_vectorized(vector<double>& x_hits_tr,
+                                 vector<double>& y_hits_tr,
+                                 vector<double>& z_hits_tr,
+                                 vector<double>& energy_hits,
+                                 map<string,string>& options,
+                                 vector<double>& S3D_x,
+                                 vector<double>& S3D_y,
+                                 vector<double>& S3D_z);
 
 // Old approach
 //string rootlocation(string tag, int run);   // inconsistency for the MC-old tag!!!
@@ -667,9 +685,26 @@ int main(int argc, char** argv)
                         
                         continue;
                     }
-                    
-                    
                 }
+                
+                vector<vector<double>> array2d_Nph(stoi(options["y_pix"]),
+                                                   vector<double>(stoi(options["x_pix"]), 0.0));
+                
+                auto ta = std::chrono::steady_clock::now();
+                // with saturation
+                if(options["saturation"]=="True") {
+                    cout<<"Starting compute_cmos_with_saturation with size = "<<x_hits_tr.size()<<"..."<<endl;
+                    compute_cmos_with_saturation(x_hits_tr,
+                                                 y_hits_tr,
+                                                 z_hits_tr,
+                                                 energy_hits,
+                                                 options,
+                                                 array2d_Nph
+                                                 );
+                }
+                auto tb = std::chrono::steady_clock::now();
+                std::chrono::duration<double> durtmp=tb-ta;
+                cout << "Time taken in seconds to compute_cmos_with_saturation is: " << durtmp.count() << endl;
                 
                 
                 outtree->Fill();
@@ -787,23 +822,60 @@ void ReadIonlist(string name, vector<vector<string>>& ionlist) {
     return;
 }
 
-int NelGEM2(vector<double> energyDep,const vector<double>& z_hit, map<string,string>& options)
-{
-    vector<double> n_ioniz_el;
+vector<double> NelGEM1(const vector<double>& N_ioniz_el) {
+    
+    vector<double> n_tot_el(N_ioniz_el.size(), 0);
+    
+    if (N_ioniz_el.size() == 1) { // in case there is only one hit (very low energy)
+        //for(int j = 0; j<(int)N_ioniz_el[0]; j++) { // FIXME: [Check if this for cycle is needed]
+            //double nsec = gRandom->Exp(GEM1_gain) * extraction_eff_GEM1;
+            //n_tot_el[0] += nsec;
+        n_tot_el[0] = N_ioniz_el[0];
+        //}
+    } else {
+        for(unsigned int i = 0; i<N_ioniz_el.size(); i++) {
+            for(int j = 0; j<(int)round(N_ioniz_el[i]); j++) {
+                double nsec = gRandom->Exp(GEM1_gain) * extraction_eff_GEM1;
+                n_tot_el[i] += nsec;
+            }
+        }
+    }
+    //DEBUG
+    //for(unsigned int i=0; i<n_tot_el.size(); i++) {
+    //    cout<<n_tot_el[i]<<"\n";
+    //}
+    
+    return n_tot_el;
+}
+
+
+vector<double> NelGEM2(const vector<double>& energyDep, const vector<double>& z_hit, map<string,string>& options) {
+    vector<double> n_ioniz_el_ini;
     double opt_pot=stod(options["ion_pot"]);
-    transform(energyDep.begin(),energyDep.end(),back_inserter(n_ioniz_el), [&] (double a) { return a/opt_pot;});
+    transform(energyDep.begin(),energyDep.end(),back_inserter(n_ioniz_el_ini), [&] (double a) { return a/opt_pot;});
     
     vector<double> drift_l;
     int opt_gem=stod(options["z_gem"]);
     transform(z_hit.begin(),z_hit.end(),back_inserter(drift_l), [&] (double a) { return abs(a-opt_gem);});
     
-    vector<double> n_ioniz_el_mean(n_ioniz_el.size(),0);
+    vector<double> n_ioniz_el_mean(n_ioniz_el_ini.size(), 0.0);
     
     double optabsorption_l=stod(options["absorption_l"]);
-    for(unsigned int i=0;i<n_ioniz_el_mean.size();i++) n_ioniz_el_mean[i]=abs(n_ioniz_el[i]*exp(-drift_l[i]/optabsorption_l));
-	
-	
-    return 0;
+    for(unsigned int i=0;i<n_ioniz_el_mean.size();i++) n_ioniz_el_mean[i]=abs(n_ioniz_el_ini[i]*exp(-drift_l[i]/optabsorption_l));
+    
+    vector<double> n_ioniz_el(n_ioniz_el_ini.size(), 0);
+    transform(n_ioniz_el_mean.begin(), n_ioniz_el_mean.end(), n_ioniz_el.begin(), [&] (double a) {
+        return gRandom->Poisson(a);
+    });
+    
+    // total number of secondary electrons considering the gain in the 2nd GEM foil
+    vector<double> n_tot_el = NelGEM1(n_ioniz_el);
+    transform(n_tot_el.begin(), n_tot_el.end(), n_tot_el.begin(), [&] (double a) {
+        return round(a * GEM2_gain * extraction_eff_GEM2);
+    });
+    
+    return n_tot_el;
+    
 }
 
 void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile)
@@ -992,6 +1064,40 @@ vector<double> rotateByAngleAndAxis(vector<double>& vec, double angle, vector<do
     result[2] = cos(angle) * vec[2] + sin(angle) * axisXvec[2] + (1.-cos(angle))*axisDOTvec*axis[2];
     
     return result;
+}
+
+void compute_cmos_with_saturation(vector<double>& x_hits_tr,
+                                  vector<double>& y_hits_tr,
+                                  vector<double>& z_hits_tr,
+                                  vector<double>& energy_hits,
+                                  map<string,string>& options,
+                                  vector<vector<double>>& array2d_Nph) {
+    
+    // vectorized smearing
+    vector<double> S3D_x;
+    vector<double> S3D_y;
+    vector<double> S3D_z;
+    cloud_smearing3D_vectorized(x_hits_tr, y_hits_tr, z_hits_tr, energy_hits, options, S3D_x, S3D_y, S3D_z);
+    
+    return;
+}
+
+void cloud_smearing3D_vectorized(vector<double>& x_hits_tr,
+                                 vector<double>& y_hits_tr,
+                                 vector<double>& z_hits_tr,
+                                 vector<double>& energy_hits,
+                                 map<string,string>& options,
+                                 vector<double>& S3D_x,
+                                 vector<double>& S3D_y,
+                                 vector<double>& S3D_z) {
+    
+    vector<double> nel = NelGEM2(energy_hits, z_hits_tr, options);
+    //DEBUG
+    //for(unsigned int i=0; i<nel.size(); i++) {
+    //    cout<<nel[i]<<"\n";
+    //}
+    
+    return;
 }
 
 
