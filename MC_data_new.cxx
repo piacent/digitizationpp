@@ -56,14 +56,16 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                                   map<string,string>& options,
                                   vector<vector<double>>& array2d_Nph);
 
-void cloud_smearing3D_vectorized(vector<double>& x_hits_tr,
-                                 vector<double>& y_hits_tr,
-                                 vector<double>& z_hits_tr,
-                                 vector<double>& energy_hits,
-                                 map<string,string>& options,
-                                 vector<double>& S3D_x,
-                                 vector<double>& S3D_y,
-                                 vector<double>& S3D_z);
+void cloud_smearing3D(vector<double>& x_hits_tr,
+                      vector<double>& y_hits_tr,
+                      vector<double>& z_hits_tr,
+                      vector<double>& energy_hits,
+                      map<string,string>& options,
+                      vector<double>& S3D_x,
+                      vector<double>& S3D_y,
+                      vector<double>& S3D_z);
+
+vector<double> compute_sigma(const double diff_const, const double diff_coeff, const vector<double>& dz);
 
 // Old approach
 //string rootlocation(string tag, int run);   // inconsistency for the MC-old tag!!!
@@ -945,7 +947,7 @@ void AddBckg(map<string,string>& options, int entry, TH2I& background) {
         
         int pic_index = gRandom->Integer(100);
         // DEBUG
-        //pic_index = 0;
+        pic_index = 0;
         
         // DEBUG
         cout<<"Using pic # "<<pic_index<<" as a pedestal..."<<endl;
@@ -1077,19 +1079,19 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
     vector<double> S3D_x;
     vector<double> S3D_y;
     vector<double> S3D_z;
-    cloud_smearing3D_vectorized(x_hits_tr, y_hits_tr, z_hits_tr, energy_hits, options, S3D_x, S3D_y, S3D_z);
+    cloud_smearing3D(x_hits_tr, y_hits_tr, z_hits_tr, energy_hits, options, S3D_x, S3D_y, S3D_z);
     
     return;
 }
 
-void cloud_smearing3D_vectorized(vector<double>& x_hits_tr,
-                                 vector<double>& y_hits_tr,
-                                 vector<double>& z_hits_tr,
-                                 vector<double>& energy_hits,
-                                 map<string,string>& options,
-                                 vector<double>& S3D_x,
-                                 vector<double>& S3D_y,
-                                 vector<double>& S3D_z) {
+void cloud_smearing3D(vector<double>& x_hits_tr,
+                      vector<double>& y_hits_tr,
+                      vector<double>& z_hits_tr,
+                      vector<double>& energy_hits,
+                      map<string,string>& options,
+                      vector<double>& S3D_x,
+                      vector<double>& S3D_y,
+                      vector<double>& S3D_z) {
     
     vector<double> nel = NelGEM2(energy_hits, z_hits_tr, options);
     //DEBUG
@@ -1097,9 +1099,25 @@ void cloud_smearing3D_vectorized(vector<double>& x_hits_tr,
     //    cout<<nel[i]<<"\n";
     //}
     
+    vector<double> dz;
+    int opt_gem=stod(options["z_gem"]);
+    transform(z_hits_tr.begin(),z_hits_tr.end(),back_inserter(dz), [&] (double a) { return abs(a-opt_gem);});
+    
+    vector<double> sigma_x = compute_sigma(stod(options["diff_const_sigma0T"]), stod(options["diff_coeff_T"]), dz);
+    vector<double> sigma_y = compute_sigma(stod(options["diff_const_sigma0T"]), stod(options["diff_coeff_T"]), dz);
+    vector<double> sigma_z = compute_sigma(stod(options["diff_const_sigma0L"]), stod(options["diff_coeff_L"]), dz);
+    
     return;
 }
 
+vector<double> compute_sigma(const double diff_const, const double diff_coeff, const vector<double>& dz) {
+    vector<double> sigmas;
+    transform(dz.begin(), dz.end(), back_inserter(sigmas), [&] (double a) {
+        return sqrt(diff_const + diff_coeff * a /10.0);
+    });
+    return sigmas;
+}
+    
 
 // Old approach:
 //string rootlocation(string tag, int run){
