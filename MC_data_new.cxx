@@ -795,6 +795,7 @@ void ReadG4Isotopes(string name, map<string,string>& dict_isotopes) {
         }
         dict_isotopes[index]=val;
         
+        
         // DEBUG
         // cout<<"---"<<index<<": "<<val<<endl;
     }
@@ -1195,12 +1196,31 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         
         
         // Padding
-        // To do
-
+        // FIXME: Write a function padding()
+        //Define a translation vector
+        
+        int x_center_cloud=(int)round(((xmax+xmin)/2.)/stod(options["x_vox_dim"]));
+        int y_center_cloud=(int)round(((ymax+ymin)/2.)/stod(options["y_vox_dim"]));
+        //cout<<"x_center_cloud "<<x_center_cloud<<endl;
+        //cout<<"y_center_cloud "<<y_center_cloud<<endl;
+        vector<int> translation = {x_center_cloud, y_center_cloud};
+        // Calculate the center position of the original array in the padded array
+        vector<int> center = {(int)(stod(options["x_pix"])/2.)+translation[0],
+                              (int)(stod(options["y_pix"])/2.)+translation[1]
+                             };
+        // cout<<"Center: "<<center[0]<<", "<<center[1]<<endl;
+        int x_start = max(0, center[0] -    (int)hout.size()/2);
+        int y_start = max(0, center[0] - (int)hout[0].size()/2);
+        int x_end   = min(stoi(options["x_pix"]), x_start + (int)hout.size());
+        int y_end   = min(stoi(options["y_pix"]), y_start + (int)hout[0].size());
+        // cout<<"PADDING ["<<x_start<<":"<<x_end<<","<<y_start<<":"<<y_end<<"]"<<endl;
+        for(int xx=x_start; xx<x_end; xx++){
+            for(int yy=y_start; yy<y_end; yy++){
+                array2d_Nph[xx][yy]=hout[xx-x_start][yy-y_start];
+            }
+        }
+        
     }
-    
-    
-    
     return;
 }
 
