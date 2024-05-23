@@ -45,7 +45,7 @@ void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile);
 vector<double> NelGEM1(const vector<double>& N_ioniz_el);
 vector<double> NelGEM2(const vector<double>& energyDep,const vector<double>& z_hit, map<string,string>& options);
 
-void AddBckg(map<string,string>& options, int entry, TH2I& background);
+void AddBckg(map<string,string>& options, vector<vector<int>>& background);
 
 bool is_NR(vector<int> pdgID_hits, int pdg);
 double angle_between(vector<double>& v1, vector<double>& v2);
@@ -173,9 +173,9 @@ int main(int argc, char** argv)
     
     
     string ending=".root";
-    for(const auto& entry : filesystem::directory_iterator(infolder))
+    for(const auto& fentry : filesystem::directory_iterator(infolder))
     {
-        string filename=entry.path();
+        string filename=fentry.path();
         cout<<filename<<endl;
         bool ends= false;
         if (ending.size() <= filename.size())    ends=equal(ending.rbegin(), ending.rend(), filename.rbegin());
@@ -514,12 +514,21 @@ int main(int argc, char** argv)
                 nhits_og = numhits;
                 
                 
-                TH2I background;
-                AddBckg(options, entry, background);
+                vector<vector<int>> background(stoi(options["x_pix"]),
+                                               vector<int>(stoi(options["x_pix"]), 0));
+                AddBckg(options, background);
                 
                 if (energy < stod(options["ion_pot"])){
                     energy = 0;
-                    TH2I final_image = background;
+                    TH2I final_image(Form("pic_run%d_ev%d", run_count, entry), "",
+                                     stoi(options["x_pix"]), -0.5, stoi(options["x_pix"]) -0.5,
+                                     stoi(options["y_pix"]), -0.5, stoi(options["y_pix"]) -0.5);
+                    
+                    for(unsigned int xx =0; xx < background.size(); xx++) {
+                        for(unsigned int yy =0; yy < background[0].size(); yy++) {
+                            final_image.SetBinContent(yy, xx, background[xx][yy]);
+                        }
+                    }
                     
                     outtree->Fill();
                     outfile->cd();
@@ -532,16 +541,16 @@ int main(int argc, char** argv)
                 vector<double> y_hits_tr;
                 vector<double> z_hits_tr;
                 
-
+                
                 if (options["NR"]=="True") {
                     // x_hits_tr = np.array(tree.x_hits) + opt.x_offset
                     // y_hits_tr = np.array(tree.y_hits) + opt.y_offset
                     // z_hits_tr = np.array(tree.z_hits) + opt.z_offset
                     vector<double> v1 = {1.,0.,0.};
                     vector<double> v2 = {stod(SRIM_events[entry][3])-stod(SRIM_events[entry][2]),
-                                         stod(SRIM_events[entry][5])-stod(SRIM_events[entry][4]),
-                                         stod(SRIM_events[entry][7])-stod(SRIM_events[entry][6]),
-                                        };
+                        stod(SRIM_events[entry][5])-stod(SRIM_events[entry][4]),
+                        stod(SRIM_events[entry][7])-stod(SRIM_events[entry][6]),
+                    };
                     
                     double        angle = angle_between(v1, v2);
                     vector<double> axis =  crossProduct(v1, v2);
@@ -580,7 +589,7 @@ int main(int argc, char** argv)
                     // FIXME: [Check which is the z axis orientation]
                     
                 }
-
+                
                 // DEBUG
                 //for(int ihit=0; ihit < numhits; ihit++) {
                 //    cout<<x_hits_tr[ihit]<<",";
@@ -629,7 +638,7 @@ int main(int argc, char** argv)
                 y_min = (*min_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * stod(options["y_pix"]) / stod(options["y_dim"]);
                 y_max = (*max_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * stod(options["y_pix"]) / stod(options["y_dim"]);
                 z_min = min(abs(*max_element(z_hits_tr.begin(),
-                                               z_hits_tr.end()) - stod(options["z_gem"])),
+                                             z_hits_tr.end()) - stod(options["z_gem"])),
                             abs(*min_element(z_hits_tr.begin(),
                                              z_hits_tr.end()) - stod(options["z_gem"])));
                 z_max = max(abs(*max_element(z_hits_tr.begin(),
@@ -637,7 +646,7 @@ int main(int argc, char** argv)
                             abs(*min_element(z_hits_tr.begin(),
                                              z_hits_tr.end()) - stod(options["z_gem"])));
                 //DEBUG
-                //cout<<" x_min = "<<x_min<<" x_max = "<<x_max<<" y_min = "<<y_min<<" y_max = "<<y_max<<" z_min = "<<z_min<<" z_max = "<<z_max;
+                cout<<" x_min = "<<x_min<<" x_max = "<<x_max<<" y_min = "<<y_min<<" y_max = "<<y_max<<" z_min = "<<z_min<<" z_max = "<<z_max<<endl;
                 
                 
                 //CUT TRACKS due to exposure of camera
@@ -706,8 +715,17 @@ int main(int argc, char** argv)
                         
                     }
                     if(x_hits_tr.size()==0){
+                        cut_energy = 0;
                         cout<<"The track was completely cut"<<endl;
-                        TH2I final_image = background;
+                        TH2I final_image(Form("pic_run%d_ev%d", run_count, entry), "",
+                                         stoi(options["x_pix"]), -0.5, stoi(options["x_pix"]) -0.5,
+                                         stoi(options["y_pix"]), -0.5, stoi(options["y_pix"]) -0.5);
+                        
+                        for(unsigned int xx =0; xx < background.size(); xx++) {
+                            for(unsigned int yy =0; yy < background[0].size(); yy++) {
+                                final_image.SetBinContent(yy, xx, background[xx][yy]);
+                            }
+                        }
                         
                         outtree->Fill();
                         outfile->cd();
@@ -740,7 +758,7 @@ int main(int argc, char** argv)
                                                     array2d_Nph
                                                     );
                 }
-
+                
                 // Integral of the track - if opt.exposure_effect, it's computed anyway after the cut on the original hits (to save time we digitize only the part that will be visible)
                 N_photons = accumulate(array2d_Nph.cbegin(), array2d_Nph.cend(), 0, [](auto sum, const auto& row) {
                     return accumulate(row.cbegin(), row.cend(), sum);
@@ -755,6 +773,163 @@ int main(int argc, char** argv)
                                     VignMap);
                 }
                 
+                
+                if (options["exposure_time_effect"]=="True") { //cut the track post-smearing
+                    if (randcut<stod(options["readout_time"])) {
+                        for(unsigned int xx=0; xx < array2d_Nph.size(); xx++) {
+                            for(int yy=0; yy < row_cut; yy++) {
+                                array2d_Nph[xx][yy] = 0.0;
+                            }
+                        }
+                    } else if(randcut> stod(options["exposure_time"]) ) {
+                        for(unsigned int xx=0; xx < array2d_Nph.size(); xx++) {
+                            for(int yy=row_cut; yy < (int)array2d_Nph[0].size(); yy++) {
+                                array2d_Nph[xx][yy] = 0.0;
+                            }
+                        }
+                    }
+                    
+                    //integral after camera exposure cut
+                    N_photons_cut = accumulate(array2d_Nph.cbegin(),
+                                               array2d_Nph.cend(), 0, [](auto sum, const auto& row) {
+                        return accumulate(row.cbegin(), row.cend(), sum);
+                    });
+                }
+                
+                TH2I final_image(Form("pic_run%d_ev%d", run_count, entry), "",
+                                 stoi(options["x_pix"]), -0.5, stoi(options["x_pix"]) -0.5,
+                                 stoi(options["y_pix"]), -0.5, stoi(options["y_pix"]) -0.5);
+                
+                for(unsigned int xx =0; xx < array2d_Nph[0].size(); xx++) {
+                    for(unsigned int yy =0; yy < array2d_Nph.size(); yy++) {
+                        int binc = background[xx][yy]+(int)array2d_Nph[yy][array2d_Nph[0].size()-xx];
+                        final_image.SetBinContent(yy, xx, binc);
+                    }
+                }
+                
+                //Cut again the hits to save the effective length and energy which is visible in the final image,
+                //and compute the number of photons post-cut
+                if (options["exposure_time_effect"]=="True") {
+                    if (randcut<stod(options["readout_time"])) {
+                        double y_cut_tmp = stod(options["y_dim"]) * (0.5 - randcut/stod(options["readout_time"]));
+                        
+                        // Removing elements from x_hits_tr
+                        x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
+                            return y_hits_tr[&x-&*x_hits_tr.begin()] < y_cut_tmp;
+                        }), x_hits_tr.end());
+                        // Removing elements from z_hits_tr
+                        z_hits_tr.erase(std::remove_if(z_hits_tr.begin(), z_hits_tr.end(), [&](const double& z) {
+                            return y_hits_tr[&z-&*z_hits_tr.begin()] < y_cut_tmp;
+                        }), z_hits_tr.end());
+                        // Removing elements from energy_hits
+                        energy_hits.erase(std::remove_if(energy_hits.begin(), energy_hits.end(), [&](const double& e) {
+                            return y_hits_tr[&e-&*energy_hits.begin()] < y_cut_tmp;
+                        }), energy_hits.end());
+                        
+                        // Removing elements from y_hits_tr [must be done after the previous ones]
+                        y_hits_tr.erase(std::remove_if(y_hits_tr.begin(), y_hits_tr.end(),[&](const double& y) {
+                            return y < y_cut_tmp;
+                        }), y_hits_tr.end());
+                        
+                    } else if (randcut> stod(options["exposure_time"]) ) {
+                        double y_cut_tmp = stod(options["y_dim"]) * (0.5 - (randcut - stod(options["exposure_time"])) / stod(options["readout_time"]));
+                        
+                        // Removing elements from x_hits_tr
+                        x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
+                            return y_hits_tr[&x-&*x_hits_tr.begin()] > y_cut_tmp;
+                        }), x_hits_tr.end());
+                        // Removing elements from z_hits_tr
+                        z_hits_tr.erase(std::remove_if(z_hits_tr.begin(), z_hits_tr.end(), [&](const double& z) {
+                            return y_hits_tr[&z-&*z_hits_tr.begin()] > y_cut_tmp;
+                        }), z_hits_tr.end());
+                        // Removing elements from energy_hits
+                        energy_hits.erase(std::remove_if(energy_hits.begin(), energy_hits.end(), [&](const double& e) {
+                            return y_hits_tr[&e-&*energy_hits.begin()] > y_cut_tmp;
+                        }), energy_hits.end());
+                        
+                        // Removing elements from y_hits_tr [must be done after the previous ones]
+                        y_hits_tr.erase(std::remove_if(y_hits_tr.begin(), y_hits_tr.end(),[&](const double& y) {
+                            return y > y_cut_tmp;
+                        }), y_hits_tr.end());
+                        
+                    }
+                    
+                    cut_energy = accumulate(energy_hits.begin(), energy_hits.end(), 0.0);
+                    
+                    if(x_hits_tr.size()==0){
+                        cut_energy = 0;
+                        cout<<"The track was completely cut after smearing"<<endl;
+                        
+                        TH2I final_image_cut(Form("pic_run%d_ev%d", run_count, entry), "",
+                                         stoi(options["x_pix"]), -0.5, stoi(options["x_pix"]) -0.5,
+                                         stoi(options["y_pix"]), -0.5, stoi(options["y_pix"]) -0.5);
+                        
+                        for(unsigned int xx =0; xx < background.size(); xx++) {
+                            for(unsigned int yy =0; yy < background[0].size(); yy++) {
+                                final_image_cut.SetBinContent(yy, xx, background[xx][yy]);
+                            }
+                        }
+                        
+                        outtree->Fill();
+                        outfile->cd();
+                        final_image_cut.Write();
+                        
+                        continue;
+                    }
+                    
+                }
+                
+                
+                // Compute variables to be saved in the tree
+                proj_track_2D_cut = 0;
+                for(int ihit=0; ihit < numhits-1; ihit++){
+                    proj_track_2D_cut += sqrt((x_hits_tr[ihit+1]-x_hits_tr[ihit])*(x_hits_tr[ihit+1]-x_hits_tr[ihit])+
+                                              (y_hits_tr[ihit+1]-y_hits_tr[ihit])*(y_hits_tr[ihit+1]-y_hits_tr[ihit])
+                                             );
+                }
+                // DEBUG
+                //cout<<"proj_track_2D_cut = "<<Form("%.10f", proj_track_2D_cut)<<endl;
+                
+                
+                x_min_cut = (*min_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * stod(options["x_dim"])) * stod(options["x_pix"]) / stod(options["x_dim"]);
+                x_max_cut = (*max_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * stod(options["x_dim"])) * stod(options["x_pix"]) / stod(options["x_dim"]);
+                y_min_cut = (*min_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * stod(options["y_pix"]) / stod(options["y_dim"]);
+                y_max_cut = (*max_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * stod(options["y_pix"]) / stod(options["y_dim"]);
+                z_min_cut = min(abs(*max_element(z_hits_tr.begin(),
+                                                 z_hits_tr.end()) - stod(options["z_gem"])),
+                                abs(*min_element(z_hits_tr.begin(),
+                                                 z_hits_tr.end()) - stod(options["z_gem"])));
+                z_max_cut = max(abs(*max_element(z_hits_tr.begin(),
+                                                 z_hits_tr.end()) - stod(options["z_gem"])),
+                                abs(*min_element(z_hits_tr.begin(),
+                                                 z_hits_tr.end()) - stod(options["z_gem"])));
+                //DEBUG
+                //cout<<" x_min_cut = "<<x_min_cut<<" x_max_cut = "<<x_max_cut<<" y_min_cut = "<<y_minv<<" y_max_cut = "<<y_max_cut<<" z_min_cut = "<<z_min_cut<<" z_max_cut = "<<z_max_cut<<endl;
+                
+                
+                // if there are at least 2 hits compute theta and phi
+                if(x_hits_tr.size() > 1) {
+                    phi   = atan2( y_hits_tr[1] - y_hits_tr[0],
+                                   x_hits_tr[1] - x_hits_tr[0]
+                                  );
+                    theta = acos((z_hits_tr[1] - z_hits_tr[0]) /
+                                 sqrt(
+                                     (x_hits_tr[1] - x_hits_tr[0])*(x_hits_tr[1] - x_hits_tr[0])+
+                                     (y_hits_tr[1] - y_hits_tr[0])*(y_hits_tr[1] - y_hits_tr[0])+
+                                     (z_hits_tr[1] - z_hits_tr[0])*(z_hits_tr[1] - z_hits_tr[0]))
+                                 );
+                } else {
+                    phi   = -999;
+                    theta = -999;
+                }
+                
+                if(options["NR"]=="False") {
+                    track_length_3D = accumulate(tracklen_hits->begin(), tracklen_hits->end(), 0.0);
+                    px              = (*px_particle)[0];
+                    py              = (*py_particle)[0];
+                    pz              = (*pz_particle)[0];
+                }
+                
                 auto tb = std::chrono::steady_clock::now();
                 std::chrono::duration<double> durtmp=tb-ta;
                 cout << "Time taken in seconds to compute_cmos_with_saturation is: " << durtmp.count() << endl;
@@ -764,12 +939,13 @@ int main(int argc, char** argv)
                 outfile->cd();
                 
                 // DEBUG
-                //background.Write();
+                final_image.Write();
                 
             }
             outfile->cd("event_info");
             outtree->Write();
             
+            cout<<Form("COMPLETED RUN %d",run_count)<<endl;
             
             f->Close();
             outfile->Close();
@@ -961,12 +1137,9 @@ void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile)
     return;
 }
 
-void AddBckg(map<string,string>& options, int entry, TH2I& background) {
+void AddBckg(map<string,string>& options, vector<vector<int>>& background) {
     
     string tmpfolder = options["bckg_path"];
-    int x_pix = stoi(options["x_pix"]);
-    int y_pix = stoi(options["y_pix"]);
-    
     
     if(! filesystem::exists(tmpfolder)){
         //DEBUG
@@ -1025,15 +1198,16 @@ void AddBckg(map<string,string>& options, int entry, TH2I& background) {
                 if(counter == pic_index) {
                     cygnolib::Picture pic=cygnolib::daq_cam2pic(event, "fusion");
                     
-                    TH2I rootpic(Form("pic_run1_ev%d", entry) , Form("pic_run1_ev%d", entry) , x_pix, -0.5, x_pix-0.5, y_pix, -0.5, y_pix-0.5);
+                    //TH2I rootpic(Form("pic_run%d_ev%d", run_count, entry), "" , x_pix, -0.5, x_pix-0.5, y_pix, -0.5, y_pix-0.5);
                     
                     vector<vector<uint16_t>> vecpic = pic.GetFrame();
                     for(unsigned int i = 0; i<vecpic.size(); i++) {
                         for (unsigned int j =0; j<vecpic[0].size(); j++) {
-                            rootpic.SetBinContent(j, i, vecpic[i][j]);
+                            //rootpic.SetBinContent(j, i, vecpic[i][j]);
+                            background[i][j] = vecpic[i][j];
                         }
                     }
-                    background=rootpic;
+                    //background=rootpic;
                     
                     found = true;
                     break;
@@ -1248,7 +1422,7 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                              };
         // cout<<"Center: "<<center[0]<<", "<<center[1]<<endl;
         int x_start = max(0, center[0] -    (int)hout.size()/2);
-        int y_start = max(0, center[0] - (int)hout[0].size()/2);
+        int y_start = max(0, center[1] - (int)hout[0].size()/2);
         int x_end   = min(stoi(options["x_pix"]), x_start + (int)hout.size());
         int y_end   = min(stoi(options["y_pix"]), y_start + (int)hout[0].size());
         // cout<<"PADDING ["<<x_start<<":"<<x_end<<","<<y_start<<":"<<y_end<<"]"<<endl;
