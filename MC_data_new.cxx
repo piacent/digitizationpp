@@ -6,6 +6,8 @@
 #include <map>
 #include <random>
 #include <string>
+#include <execution>
+#include <numeric>
 #include <algorithm>
 #include <cmath>
 #include <stdio.h>
@@ -30,6 +32,7 @@ double GEM3_gain;
 double extraction_eff_GEM1;
 double extraction_eff_GEM2;
 double extraction_eff_GEM3;
+double omega;
 int x_ini = 0;
 int y_ini = 0;
 int z_ini = 0;
@@ -38,7 +41,9 @@ void ReadConfig(string name, map<string,string>& options);
 void ReadG4Isotopes(string name, map<string,string>& dict_isotopes);
 void ReadIonlist(string name, vector<vector<string>>& ionlist);
 void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile);
-int NelGEM2(const vector<double>& energyDep,const vector<double>& z_hit, map<string,string>& options);
+
+vector<double> NelGEM1(const vector<double>& N_ioniz_el);
+vector<double> NelGEM2(const vector<double>& energyDep,const vector<double>& z_hit, map<string,string>& options);
 
 void AddBckg(map<string,string>& options, int entry, TH2I& background);
 
@@ -46,6 +51,31 @@ bool is_NR(vector<int> pdgID_hits, int pdg);
 double angle_between(vector<double>& v1, vector<double>& v2);
 vector<double> crossProduct(vector<double>& a, vector<double>& b);
 vector<double> rotateByAngleAndAxis(vector<double>& vec, double angle, vector<double>& axis);
+
+void compute_cmos_with_saturation(vector<double>& x_hits_tr,
+                                  vector<double>& y_hits_tr,
+                                  vector<double>& z_hits_tr,
+                                  vector<double>& energy_hits,
+                                  map<string,string>& options,
+                                  vector<vector<double>>& array2d_Nph);
+
+void cloud_smearing3D(vector<double>& x_hits_tr,
+                      vector<double>& y_hits_tr,
+                      vector<double>& z_hits_tr,
+                      vector<double>& energy_hits,
+                      map<string,string>& options,
+                      vector<double>& S3D_x,
+                      vector<double>& S3D_y,
+                      vector<double>& S3D_z);
+
+vector<double> compute_sigma(const double diff_const, const double diff_coeff, const vector<double>& dz);
+vector<double> smear(const vector<double>& axis_hit, const vector<double>& axis_sigma, const vector<double>& nel);
+
+vector<double> arange(double start, double stop, double step);
+double round_up_to_even(const double f);
+
+//void Nph_saturation(const TH3I& h3d, map<string,string>& options, vector<vector<double>>& hout);
+double Nph_saturation(int nel, double A, double beta);
 
 // Old approach
 //string rootlocation(string tag, int run);   // inconsistency for the MC-old tag!!!
@@ -100,7 +130,7 @@ int main(int argc, char** argv)
     double y_dim=stod(options["y_dim"]);
     double demag=y_dim/stod(options["sensor_size"]);
     double aperture=stod(options["camera_aperture"]);
-    double omega=1./pow(4.*(demag+1)*aperture,2);
+    omega=1./pow(4.*(demag+1)*aperture,2);
 	
     //Code execution
     int run_count = 1;
@@ -418,7 +448,6 @@ int main(int argc, char** argv)
                 row_cut         = -1;
                 eventnumber_out = eventnumber;
                 
-                // FIXME: [???]
                 if(options["NR"] == "True") {
                     energy            = ekin_particle;
                     particle_type_out = particle_type;
@@ -488,7 +517,7 @@ int main(int argc, char** argv)
                 vector<double> z_hits_tr;
                 
 
-                if (options["NR"]=="True") { // FIXME: TO BE CHECKED!!!!!
+                if (options["NR"]=="True") {
                     // x_hits_tr = np.array(tree.x_hits) + opt.x_offset
                     // y_hits_tr = np.array(tree.y_hits) + opt.y_offset
                     // z_hits_tr = np.array(tree.z_hits) + opt.z_offset
@@ -531,6 +560,9 @@ int main(int argc, char** argv)
                               x_hits->end(),
                               back_inserter(z_hits_tr),
                               [&] (double a) {return a + stod(options["z_offset"]);});
+                    
+                    // FIXME: [Check which is the z axis orientation]
+                    
                 }
 
                 // DEBUG
@@ -667,9 +699,26 @@ int main(int argc, char** argv)
                         
                         continue;
                     }
-                    
-                    
                 }
+                
+                vector<vector<double>> array2d_Nph(stoi(options["y_pix"]),
+                                                   vector<double>(stoi(options["x_pix"]), 0.0));
+                
+                auto ta = std::chrono::steady_clock::now();
+                // with saturation
+                if(options["saturation"]=="True") {
+                    cout<<"Starting compute_cmos_with_saturation with size = "<<x_hits_tr.size()<<"..."<<endl;
+                    compute_cmos_with_saturation(x_hits_tr,
+                                                 y_hits_tr,
+                                                 z_hits_tr,
+                                                 energy_hits,
+                                                 options,
+                                                 array2d_Nph
+                                                 );
+                }
+                auto tb = std::chrono::steady_clock::now();
+                std::chrono::duration<double> durtmp=tb-ta;
+                cout << "Time taken in seconds to compute_cmos_with_saturation is: " << durtmp.count() << endl;
                 
                 
                 outtree->Fill();
@@ -746,6 +795,7 @@ void ReadG4Isotopes(string name, map<string,string>& dict_isotopes) {
         }
         dict_isotopes[index]=val;
         
+        
         // DEBUG
         // cout<<"---"<<index<<": "<<val<<endl;
     }
@@ -787,23 +837,60 @@ void ReadIonlist(string name, vector<vector<string>>& ionlist) {
     return;
 }
 
-int NelGEM2(vector<double> energyDep,const vector<double>& z_hit, map<string,string>& options)
-{
-    vector<double> n_ioniz_el;
+vector<double> NelGEM1(const vector<double>& N_ioniz_el) {
+    
+    vector<double> n_tot_el(N_ioniz_el.size(), 0);
+    
+    if (N_ioniz_el.size() == 1) { // in case there is only one hit (very low energy)
+        //for(int j = 0; j<(int)N_ioniz_el[0]; j++) {
+            //double nsec = gRandom->Exp(GEM1_gain) * extraction_eff_GEM1;
+            //n_tot_el[0] += nsec;
+        n_tot_el[0] = N_ioniz_el[0];
+        //}
+    } else {
+        for(unsigned int i = 0; i<N_ioniz_el.size(); i++) {
+            for(int j = 0; j<(int)round(N_ioniz_el[i]); j++) {
+                double nsec = gRandom->Exp(GEM1_gain) * extraction_eff_GEM1;
+                n_tot_el[i] += nsec;
+            }
+        }
+    }
+    //DEBUG
+    //for(unsigned int i=0; i<n_tot_el.size(); i++) {
+    //    cout<<n_tot_el[i]<<"\n";
+    //}
+    
+    return n_tot_el;
+}
+
+
+vector<double> NelGEM2(const vector<double>& energyDep, const vector<double>& z_hit, map<string,string>& options) {
+    vector<double> n_ioniz_el_ini;
     double opt_pot=stod(options["ion_pot"]);
-    transform(energyDep.begin(),energyDep.end(),back_inserter(n_ioniz_el), [&] (double a) { return a/opt_pot;});
+    transform(energyDep.begin(),energyDep.end(),back_inserter(n_ioniz_el_ini), [&] (double a) { return a/opt_pot;});
     
     vector<double> drift_l;
     int opt_gem=stod(options["z_gem"]);
     transform(z_hit.begin(),z_hit.end(),back_inserter(drift_l), [&] (double a) { return abs(a-opt_gem);});
     
-    vector<double> n_ioniz_el_mean(n_ioniz_el.size(),0);
+    vector<double> n_ioniz_el_mean(n_ioniz_el_ini.size(), 0.0);
     
     double optabsorption_l=stod(options["absorption_l"]);
-    for(unsigned int i=0;i<n_ioniz_el_mean.size();i++) n_ioniz_el_mean[i]=abs(n_ioniz_el[i]*exp(-drift_l[i]/optabsorption_l));
-	
-	
-    return 0;
+    for(unsigned int i=0;i<n_ioniz_el_mean.size();i++) n_ioniz_el_mean[i]=abs(n_ioniz_el_ini[i]*exp(-drift_l[i]/optabsorption_l));
+    
+    vector<double> n_ioniz_el(n_ioniz_el_ini.size(), 0);
+    transform(n_ioniz_el_mean.begin(), n_ioniz_el_mean.end(), n_ioniz_el.begin(), [&] (double a) {
+        return gRandom->Poisson(a);
+    });
+    
+    // total number of secondary electrons considering the gain in the 2nd GEM foil
+    vector<double> n_tot_el = NelGEM1(n_ioniz_el);
+    transform(n_tot_el.begin(), n_tot_el.end(), n_tot_el.begin(), [&] (double a) {
+        return round(a * GEM2_gain * extraction_eff_GEM2);
+    });
+    
+    return n_tot_el;
+    
 }
 
 void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile)
@@ -873,7 +960,7 @@ void AddBckg(map<string,string>& options, int entry, TH2I& background) {
         
         int pic_index = gRandom->Integer(100);
         // DEBUG
-        //pic_index = 0;
+        pic_index = 0;
         
         // DEBUG
         cout<<"Using pic # "<<pic_index<<" as a pedestal..."<<endl;
@@ -994,6 +1081,239 @@ vector<double> rotateByAngleAndAxis(vector<double>& vec, double angle, vector<do
     return result;
 }
 
+void compute_cmos_with_saturation(vector<double>& x_hits_tr,
+                                  vector<double>& y_hits_tr,
+                                  vector<double>& z_hits_tr,
+                                  vector<double>& energy_hits,
+                                  map<string,string>& options,
+                                  vector<vector<double>>& array2d_Nph) {
+    
+    // vectorized smearing
+    vector<double> S3D_x;
+    vector<double> S3D_y;
+    vector<double> S3D_z;
+    cloud_smearing3D(x_hits_tr, y_hits_tr, z_hits_tr, energy_hits, options, S3D_x, S3D_y, S3D_z);
+    
+    // if there are no electrons on GEM3, just use empty image
+    if (S3D_x.size() == 0) return;
+    // if there are electrons on GEM3, apply saturation effect
+    else {
+        // numpy histo is faster than ROOT histo
+        //histo_cloud_entries = np.array([S3D_x, S3D_y, S3D_z]).transpose();
+        //histo_cloud_entries = histo_cloud_entries[histo_cloud_entries[:, 2].argsort()]
+        double xmin = (*min_element(S3D_x.begin(), S3D_x.end()));
+        double xmax = (*max_element(S3D_x.begin(), S3D_x.end()));
+        double ymin = (*min_element(S3D_y.begin(), S3D_y.end()));
+        double ymax = (*max_element(S3D_y.begin(), S3D_y.end()));
+        double zmin = (*min_element(S3D_z.begin(), S3D_z.end()));
+        double zmax = (*max_element(S3D_z.begin(), S3D_z.end()));
+        
+        double deltaX = abs(xmax-xmin);
+        double deltaY = abs(ymax-ymin);
+        
+        // FIXME: create a function for the saturation loop
+        // FIXME: find best value of maxvolume. 1e8 might not me the best one
+        double max_3Dhisto_volume=1*1e8;      // (volume in number of voxels) that's around 0.5*1.6 GB of RAM
+        double deltaZ=max(2*stod(options["z_vox_dim"]),
+                          stod(options["z_vox_dim"]) * max_3Dhisto_volume /
+                            (deltaX / stod(options["x_vox_dim"])) /
+                            (deltaY / stod(options["y_vox_dim"]))
+                          );
+        
+        vector<double> split_vals = arange(zmin, zmax, deltaZ);
+        if(split_vals[split_vals.size()-1] < zmax) split_vals.push_back(zmax+deltaZ/10.);
+        
+        double xbin_dim = stod(options["x_vox_dim"]); //opt.x_dim/opt.x_pix
+        double ybin_dim = stod(options["y_vox_dim"]); //opt.y_dim/opt.y_pix
+        
+        double x_n_bin = round_up_to_even((xmax-xmin)/xbin_dim);
+        double y_n_bin = round_up_to_even((ymax-ymin)/ybin_dim);
+        
+        // DEBUG
+        cout<<"size = "<<S3D_z.size()<<endl;
+        
+        double optA                 = stod(options["A"]);
+        double optbeta              = stod(options["beta"]);
+        double optphotons_per_el    = stod(options["photons_per_el"]);
+        double optcounts_per_photon = stod(options["counts_per_photon"]);
+        
+        vector<vector<int>> hout(x_n_bin-1, vector<int>(y_n_bin-1, 0.0));
+        
+        for(unsigned int i=0; i < split_vals.size()-1; i++) {
+            
+            // Vector to store all indices
+            vector<size_t> allindices(S3D_z.size());
+            // Fill indices with 0, 1, 2, ..., numbers.size() - 1
+            iota(allindices.begin(), allindices.end(), 0);
+            
+            // Getting the indices where split_vals[i] <= S3D_z < split_vals[i+1]
+            vector<size_t> indices;
+            copy_if(allindices.begin(), allindices.end(), back_inserter(indices), [&](size_t n) {
+                return ( S3D_z[n] >= split_vals[i] && S3D_z[n] < split_vals[i+1]);
+            });
+
+            if(indices.size()==0) continue;
+            
+            double zbin_dim = stod(options["z_vox_dim"]);
+            double z_n_bin  = max(2.0, round_up_to_even((split_vals[i+1]-split_vals[i])/zbin_dim));
+            
+            vector<vector<vector<double>>> hc(x_n_bin,
+                                              vector<vector<double>>(y_n_bin,
+                                                                     vector<double>(z_n_bin, 0.0)));
+            
+            
+            //cout<<"DEBUG "<<hc.size()<<","<<hc[0].size()<<","<<hc[0][0].size()<<endl<<flush;
+            cout<<"Amplifying voxel region "<<i<<"/"<<split_vals.size()-1-1<<endl;
+            
+            // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
+            for_each(indices.begin(), indices.end(), [&](int ihit) {
+                int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
+                int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
+                int zz = floor((S3D_z[ihit]-split_vals[i])/ zbin_dim);
+                hc[xx][yy][zz] += 1.;
+            });
+            
+            // Applying GEM3 amplification
+            for(int xx = 0; xx<x_n_bin-1; xx++){
+                for(int yy=0; yy<y_n_bin-1; yy++) {
+                    for(int zz=0; zz<z_n_bin-1; zz++){
+                        hout[xx][yy]+=Nph_saturation(hc[xx][yy][zz], optA, optbeta);
+                    }
+                }
+            }
+            
+        }
+        
+        // Applying camera response + Poisson smearing
+        for_each(hout.begin(), hout.end(),[&](std::vector<int>& v)  {
+            transform (v.begin(), v.end(), v.begin(), [&] (int elem){
+                return gRandom->Poisson(elem *
+                                        omega *
+                                        optphotons_per_el *
+                                        optcounts_per_photon);
+            });
+        });
+        
+        
+        // Padding
+        // FIXME: Write a function padding()
+        //Define a translation vector
+        
+        int x_center_cloud=(int)round(((xmax+xmin)/2.)/stod(options["x_vox_dim"]));
+        int y_center_cloud=(int)round(((ymax+ymin)/2.)/stod(options["y_vox_dim"]));
+        //cout<<"x_center_cloud "<<x_center_cloud<<endl;
+        //cout<<"y_center_cloud "<<y_center_cloud<<endl;
+        vector<int> translation = {x_center_cloud, y_center_cloud};
+        // Calculate the center position of the original array in the padded array
+        vector<int> center = {(int)(stod(options["x_pix"])/2.)+translation[0],
+                              (int)(stod(options["y_pix"])/2.)+translation[1]
+                             };
+        // cout<<"Center: "<<center[0]<<", "<<center[1]<<endl;
+        int x_start = max(0, center[0] -    (int)hout.size()/2);
+        int y_start = max(0, center[0] - (int)hout[0].size()/2);
+        int x_end   = min(stoi(options["x_pix"]), x_start + (int)hout.size());
+        int y_end   = min(stoi(options["y_pix"]), y_start + (int)hout[0].size());
+        // cout<<"PADDING ["<<x_start<<":"<<x_end<<","<<y_start<<":"<<y_end<<"]"<<endl;
+        for(int xx=x_start; xx<x_end; xx++){
+            for(int yy=y_start; yy<y_end; yy++){
+                array2d_Nph[xx][yy]=hout[xx-x_start][yy-y_start];
+            }
+        }
+        
+    }
+    return;
+}
+
+void cloud_smearing3D(vector<double>& x_hits_tr,
+                      vector<double>& y_hits_tr,
+                      vector<double>& z_hits_tr,
+                      vector<double>& energy_hits,
+                      map<string,string>& options,
+                      vector<double>& S3D_x,
+                      vector<double>& S3D_y,
+                      vector<double>& S3D_z) {
+    
+    vector<double> nel = NelGEM2(energy_hits, z_hits_tr, options);
+    //DEBUG
+    //for(unsigned int i=0; i<nel.size(); i++) {
+    //    cout<<nel[i]<<"\n";
+    //}
+    
+    vector<double> dz;
+    int opt_gem=stod(options["z_gem"]);
+    transform(z_hits_tr.begin(),z_hits_tr.end(),back_inserter(dz), [&] (double a) { return abs(a-opt_gem);});
+    
+    vector<double> sigma_x = compute_sigma(stod(options["diff_const_sigma0T"]), stod(options["diff_coeff_T"]), dz);
+    vector<double> sigma_y = compute_sigma(stod(options["diff_const_sigma0T"]), stod(options["diff_coeff_T"]), dz);
+    vector<double> sigma_z = compute_sigma(stod(options["diff_const_sigma0L"]), stod(options["diff_coeff_L"]), dz);
+    
+    S3D_x = smear(x_hits_tr, sigma_x, nel);
+    S3D_y = smear(y_hits_tr, sigma_y, nel);
+    S3D_z = smear(z_hits_tr, sigma_z, nel);
+    
+    // DEBUG
+    //for(unsigned int i=0; i<S3D_x.size(); i++) {
+    //    cout<<S3D_x[i]<<endl;
+    //}
+    
+    return;
+}
+
+vector<double> compute_sigma(const double diff_const, const double diff_coeff, const vector<double>& dz) {
+    vector<double> sigmas;
+    transform(dz.begin(), dz.end(), back_inserter(sigmas), [&] (double a) {
+        return sqrt(diff_const + diff_coeff * a /10.0);
+    });
+    return sigmas;
+}
+    
+vector<double> smear(const vector<double>& axis_hit, const vector<double>& axis_sigma, const vector<double>& nel) {
+    
+    int nelsum = accumulate(nel.begin(), nel.end(), 0);
+    
+    vector<double> X(nelsum, 0.0);
+    
+    // Create a vector of indices where each index i is repeated nel[i] times
+    vector<int> indices(nelsum);
+    vector<int> positions(axis_hit.size() + 1, 0);
+    
+    // Compute cumulative sum of nel to determine positions
+    partial_sum(nel.begin(), nel.end(), positions.begin() + 1);
+    
+    // Fill the indices vector
+    for_each(positions.begin(), positions.end() - 1, [&, i = 0](int pos) mutable {
+        fill(indices.begin() + pos, indices.begin() + positions[i + 1], i);
+        ++i;
+    });
+    
+    // Fill X with Gaussian-distributed values based on axis_hit and axis_sigma
+    transform(indices.begin(), indices.end(), X.begin(), [&](int i) {
+        return gRandom->Gaus(axis_hit[i], axis_sigma[i]);
+    });
+    
+    return X;
+}
+
+vector<double> arange(double start, double stop, double step) {
+    
+    int length = (stop - start) / step;
+    vector<double> result(length+1);
+    double value = start;
+    generate(result.begin(), result.end(), [&value, step]() mutable {
+        double current = value;
+        value += step;
+        return current;
+    });
+    return result;
+}
+
+double round_up_to_even(const double f) {
+    return ceil(f / 2.0) * 2.0;
+}
+
+double Nph_saturation(int nel, double A, double beta) {
+    return nel * A * GEM3_gain / (1.0 + beta * GEM3_gain * nel);
+}
 
 // Old approach:
 //string rootlocation(string tag, int run){
