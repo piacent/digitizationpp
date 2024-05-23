@@ -541,16 +541,16 @@ int main(int argc, char** argv)
                 vector<double> y_hits_tr;
                 vector<double> z_hits_tr;
                 
-                
+
                 if (options["NR"]=="True") {
                     // x_hits_tr = np.array(tree.x_hits) + opt.x_offset
                     // y_hits_tr = np.array(tree.y_hits) + opt.y_offset
                     // z_hits_tr = np.array(tree.z_hits) + opt.z_offset
                     vector<double> v1 = {1.,0.,0.};
                     vector<double> v2 = {stod(SRIM_events[entry][3])-stod(SRIM_events[entry][2]),
-                        stod(SRIM_events[entry][5])-stod(SRIM_events[entry][4]),
-                        stod(SRIM_events[entry][7])-stod(SRIM_events[entry][6]),
-                    };
+                                         stod(SRIM_events[entry][5])-stod(SRIM_events[entry][4]),
+                                         stod(SRIM_events[entry][7])-stod(SRIM_events[entry][6]),
+                                        };
                     
                     double        angle = angle_between(v1, v2);
                     vector<double> axis =  crossProduct(v1, v2);
@@ -646,7 +646,7 @@ int main(int argc, char** argv)
                             abs(*min_element(z_hits_tr.begin(),
                                              z_hits_tr.end()) - stod(options["z_gem"])));
                 //DEBUG
-                cout<<" x_min = "<<x_min<<" x_max = "<<x_max<<" y_min = "<<y_min<<" y_max = "<<y_max<<" z_min = "<<z_min<<" z_max = "<<z_max<<endl;
+                //cout<<" x_min = "<<x_min<<" x_max = "<<x_max<<" y_min = "<<y_min<<" y_max = "<<y_max<<" z_min = "<<z_min<<" z_max = "<<z_max<<endl;
                 
                 
                 //CUT TRACKS due to exposure of camera
