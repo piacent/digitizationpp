@@ -153,7 +153,7 @@ int main(int argc, char** argv)
     int run_count = 1;
     auto t0 = std::chrono::steady_clock::now();
     
-    if(options["fixed_seed"]=="True" || options["fixed_seed"]=="true") gRandom->SetSeed(0);
+    if(options["fixed_seed"]=="True" || options["fixed_seed"]=="true") gRandom->SetSeed(10);
     
     vector<int> eventnumber;
     vector<int> particle_type;
@@ -802,6 +802,8 @@ int main(int argc, char** argv)
                 
                 for(unsigned int xx =0; xx < array2d_Nph[0].size(); xx++) {
                     for(unsigned int yy =0; yy < array2d_Nph.size(); yy++) {
+                        // DEBUG
+                        //int binc = (int)array2d_Nph[yy][array2d_Nph[0].size()-xx];
                         int binc = background[xx][yy]+(int)array2d_Nph[yy][array2d_Nph[0].size()-xx];
                         final_image.SetBinContent(yy, xx, binc);
                     }
@@ -1326,23 +1328,22 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         
         // FIXME: create a function for the saturation loop
         // FIXME: find best value of maxvolume. 1e8 might not me the best one
-        double max_3Dhisto_volume=1*1e8;      // (volume in number of voxels) that's around 0.5*1.6 GB of RAM
-        
+        long int max_3Dhisto_volume=(long int)1e+8;  // (volume in number of voxels) that's around 0.5*1.6 GB of RAM
         
         double xbin_dim = stod(options["x_vox_dim"]); //opt.x_dim/opt.x_pix
         double ybin_dim = stod(options["y_vox_dim"]); //opt.y_dim/opt.y_pix
         double zbin_dim = stod(options["z_vox_dim"]);
         
         
-        double x_n_bin = round_up_to_even((xmax-xmin)/xbin_dim);
-        double y_n_bin = round_up_to_even((ymax-ymin)/ybin_dim);
-        double z_n_bin_MAX = round_up_to_even((zmax-zmin)/zbin_dim);
+        long int x_n_bin = round_up_to_even((xmax-xmin)/xbin_dim);
+        long int y_n_bin = round_up_to_even((ymax-ymin)/ybin_dim);
+        long int z_n_bin_MAX = round_up_to_even((zmax-zmin)/zbin_dim);
         
         // If voxel regions <= 2 -> use the standard algorithm, otherwise use the map algorithm
         bool map_algorithm = true;
         if( x_n_bin * y_n_bin * z_n_bin_MAX < 2*max_3Dhisto_volume) map_algorithm = false;
         
-        double z_n_bin;
+        long int z_n_bin;
         if (map_algorithm) z_n_bin = z_n_bin_MAX;
         
         // DEBUG
@@ -1356,26 +1357,32 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         vector<vector<int>> hout(x_n_bin, vector<int>(y_n_bin, 0.0));
         
         if(map_algorithm) {
-            map<int, int> hcmap;
+            map<long int, int> hcmap;
             
             vector<size_t> indices(S3D_z.size());
             // Fill indices with 0, 1, 2, ..., numbers.size() - 1
             iota(indices.begin(), indices.end(), 0);
             
             // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
+            //long int L = x_n_bin-1;
+            long int M = y_n_bin;
+            long int N = z_n_bin;
+            
             for_each(indices.begin(), indices.end(), [&](int ihit) {
-                int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
-                int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
-                int zz = floor((S3D_z[ihit]- zmin)/ zbin_dim);
-                int map_index = xx * (y_n_bin*z_n_bin) + yy * z_n_bin + zz;
+                long int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
+                long int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
+                long int zz = floor((S3D_z[ihit]- zmin)/ zbin_dim);
+                long int map_index = xx * (M * N) + yy * N + zz;
+                
                 if (hcmap.find(map_index) == hcmap.end()) hcmap[map_index] = 1;
                 else hcmap[map_index] += 1;
+                
             });
             
             for(auto const& [key, val] : hcmap) {
-                int zz = (int)key % (int)z_n_bin ;
-                int yy = (((int)key - zz) / (int)z_n_bin) % (int)y_n_bin;
-                int xx = ((int)key - yy * (int)z_n_bin - zz) / (int)z_n_bin / (int)y_n_bin;
+                int zz = key % N ;
+                int yy = ((key - zz) / N) % M;
+                int xx = (key - yy * N - zz) / N / M;
                 hout[xx][yy]+=Nph_saturation(val, optA, optbeta);
                 
             }
@@ -1409,14 +1416,13 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                 
                 z_n_bin  = max(2.0, round_up_to_even((split_vals[i+1]-split_vals[i])/zbin_dim));
                 
-                vector<vector<vector<double>>> hc(x_n_bin,
-                                                  vector<vector<double>>(y_n_bin,
-                                                                         vector<double>(z_n_bin, 0.0)));
+                vector<vector<vector<double>>> hc(x_n_bin+1,
+                                                  vector<vector<double>>(y_n_bin+1,
+                                                                         vector<double>(z_n_bin+1, 0.0)));
                 
                 
                 //cout<<"DEBUG "<<hc.size()<<","<<hc[0].size()<<","<<hc[0][0].size()<<endl<<flush;
-                cout<<"Amplifying voxel region "<<i<<"/"<<split_vals.size()-1-1<<endl;
-                
+                cout<<"Amplifying voxel region z=["<<split_vals[i]<<","<<split_vals[i+1]<<"] "<<i<<"/"<<split_vals.size()-1-1<<endl;
                 
                 // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
                 for_each(indices.begin(), indices.end(), [&](int ihit) {
@@ -1615,19 +1621,19 @@ vector<double> compute_sigma(const double diff_const, const double diff_coeff, c
     
 vector<double> smear(const vector<double>& axis_hit, const vector<double>& axis_sigma, const vector<double>& nel) {
     
-    int nelsum = accumulate(nel.begin(), nel.end(), 0);
+    long int nelsum = accumulate(nel.begin(), nel.end(), (long int)0);
     
     vector<double> X(nelsum, 0.0);
     
     // Create a vector of indices where each index i is repeated nel[i] times
-    vector<int> indices(nelsum);
-    vector<int> positions(axis_hit.size() + 1, 0);
+    vector<long int> indices(nelsum);
+    vector<long int> positions(axis_hit.size() + 1, 0);
     
     // Compute cumulative sum of nel to determine positions
     partial_sum(nel.begin(), nel.end(), positions.begin() + 1);
     
     // Fill the indices vector
-    for_each(positions.begin(), positions.end() - 1, [&, i = 0](int pos) mutable {
+    for_each(positions.begin(), positions.end() - 1, [&, i = 0](long int pos) mutable {
         fill(indices.begin() + pos, indices.begin() + positions[i + 1], i);
         ++i;
     });
