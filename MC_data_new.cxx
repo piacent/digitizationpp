@@ -1298,7 +1298,8 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                                   vector<double>& z_hits_tr,
                                   vector<double>& energy_hits,
                                   map<string,string>& options,
-                                  vector<vector<double>>& array2d_Nph) {
+                                  vector<vector<double>>& array2d_Nph
+                                  ) {
     
     // vectorized smearing
     vector<double> S3D_x;
@@ -1326,20 +1327,23 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         // FIXME: create a function for the saturation loop
         // FIXME: find best value of maxvolume. 1e8 might not me the best one
         double max_3Dhisto_volume=1*1e8;      // (volume in number of voxels) that's around 0.5*1.6 GB of RAM
-        double deltaZ=max(2*stod(options["z_vox_dim"]),
-                          stod(options["z_vox_dim"]) * max_3Dhisto_volume /
-                            (deltaX / stod(options["x_vox_dim"])) /
-                            (deltaY / stod(options["y_vox_dim"]))
-                          );
         
-        vector<double> split_vals = arange(zmin, zmax, deltaZ);
-        if(split_vals[split_vals.size()-1] < zmax) split_vals.push_back(zmax+deltaZ/10.);
         
         double xbin_dim = stod(options["x_vox_dim"]); //opt.x_dim/opt.x_pix
         double ybin_dim = stod(options["y_vox_dim"]); //opt.y_dim/opt.y_pix
+        double zbin_dim = stod(options["z_vox_dim"]);
+        
         
         double x_n_bin = round_up_to_even((xmax-xmin)/xbin_dim);
         double y_n_bin = round_up_to_even((ymax-ymin)/ybin_dim);
+        double z_n_bin_MAX = round_up_to_even((zmax-zmin)/zbin_dim);
+        
+        // If voxel regions <= 2 -> use the standard algorithm, otherwise use the map algorithm
+        bool map_algorithm = true;
+        if( x_n_bin * y_n_bin * z_n_bin_MAX < 2*max_3Dhisto_volume) map_algorithm = false;
+        
+        double z_n_bin;
+        if (map_algorithm) z_n_bin = z_n_bin_MAX;
         
         // DEBUG
         cout<<"size = "<<S3D_z.size()<<endl;
@@ -1349,49 +1353,95 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         double optphotons_per_el    = stod(options["photons_per_el"]);
         double optcounts_per_photon = stod(options["counts_per_photon"]);
         
-        vector<vector<int>> hout(x_n_bin-1, vector<int>(y_n_bin-1, 0.0));
+        vector<vector<int>> hout(x_n_bin, vector<int>(y_n_bin, 0.0));
         
-        for(unsigned int i=0; i < split_vals.size()-1; i++) {
+        if(map_algorithm) {
+            map<int, int> hcmap;
             
-            // Vector to store all indices
-            vector<size_t> allindices(S3D_z.size());
+            vector<size_t> indices(S3D_z.size());
             // Fill indices with 0, 1, 2, ..., numbers.size() - 1
-            iota(allindices.begin(), allindices.end(), 0);
-            
-            // Getting the indices where split_vals[i] <= S3D_z < split_vals[i+1]
-            vector<size_t> indices;
-            copy_if(allindices.begin(), allindices.end(), back_inserter(indices), [&](size_t n) {
-                return ( S3D_z[n] >= split_vals[i] && S3D_z[n] < split_vals[i+1]);
-            });
-
-            if(indices.size()==0) continue;
-            
-            double zbin_dim = stod(options["z_vox_dim"]);
-            double z_n_bin  = max(2.0, round_up_to_even((split_vals[i+1]-split_vals[i])/zbin_dim));
-            
-            vector<vector<vector<double>>> hc(x_n_bin,
-                                              vector<vector<double>>(y_n_bin,
-                                                                     vector<double>(z_n_bin, 0.0)));
-            
-            
-            //cout<<"DEBUG "<<hc.size()<<","<<hc[0].size()<<","<<hc[0][0].size()<<endl<<flush;
-            cout<<"Amplifying voxel region "<<i<<"/"<<split_vals.size()-1-1<<endl;
+            iota(indices.begin(), indices.end(), 0);
             
             // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
             for_each(indices.begin(), indices.end(), [&](int ihit) {
                 int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
                 int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
-                int zz = floor((S3D_z[ihit]-split_vals[i])/ zbin_dim);
-                hc[xx][yy][zz] += 1.;
+                int zz = floor((S3D_z[ihit]- zmin)/ zbin_dim);
+                int map_index = xx * (y_n_bin*z_n_bin) + yy * z_n_bin + zz;
+                if (hcmap.find(map_index) == hcmap.end()) hcmap[map_index] = 1;
+                else hcmap[map_index] += 1;
             });
             
-            // Applying GEM3 amplification
-            for(int xx = 0; xx<x_n_bin-1; xx++){
-                for(int yy=0; yy<y_n_bin-1; yy++) {
-                    for(int zz=0; zz<z_n_bin-1; zz++){
-                        hout[xx][yy]+=Nph_saturation(hc[xx][yy][zz], optA, optbeta);
+            for(auto const& [key, val] : hcmap) {
+                int zz = (int)key % (int)z_n_bin ;
+                int yy = (((int)key - zz) / (int)z_n_bin) % (int)y_n_bin;
+                int xx = ((int)key - yy * (int)z_n_bin - zz) / (int)z_n_bin / (int)y_n_bin;
+                hout[xx][yy]+=Nph_saturation(val, optA, optbeta);
+                
+            }
+            
+        } else {
+            double deltaZ=max(2*stod(options["z_vox_dim"]),
+                              stod(options["z_vox_dim"]) * max_3Dhisto_volume /
+                                (deltaX / stod(options["x_vox_dim"])) /
+                                (deltaY / stod(options["y_vox_dim"]))
+                              );
+            
+            vector<double> split_vals = arange(zmin, zmax, deltaZ);
+            if(split_vals[split_vals.size()-1] < zmax) split_vals.push_back(zmax+deltaZ/10.);
+        
+        
+        
+            for(unsigned int i=0; i < split_vals.size()-1; i++) {
+                
+                // Vector to store all indices
+                vector<size_t> allindices(S3D_z.size());
+                // Fill indices with 0, 1, 2, ..., numbers.size() - 1
+                iota(allindices.begin(), allindices.end(), 0);
+                
+                // Getting the indices where split_vals[i] <= S3D_z < split_vals[i+1]
+                vector<size_t> indices;
+                copy_if(allindices.begin(), allindices.end(), back_inserter(indices), [&](size_t n) {
+                    return ( S3D_z[n] >= split_vals[i] && S3D_z[n] < split_vals[i+1]);
+                });
+                
+                if(indices.size()==0) continue;
+                
+                z_n_bin  = max(2.0, round_up_to_even((split_vals[i+1]-split_vals[i])/zbin_dim));
+                
+                vector<vector<vector<double>>> hc(x_n_bin,
+                                                  vector<vector<double>>(y_n_bin,
+                                                                         vector<double>(z_n_bin, 0.0)));
+                
+                
+                //cout<<"DEBUG "<<hc.size()<<","<<hc[0].size()<<","<<hc[0][0].size()<<endl<<flush;
+                cout<<"Amplifying voxel region "<<i<<"/"<<split_vals.size()-1-1<<endl;
+                
+                
+                // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
+                for_each(indices.begin(), indices.end(), [&](int ihit) {
+                    int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
+                    int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
+                    int zz = floor((S3D_z[ihit]-split_vals[i])/ zbin_dim);
+                    hc[xx][yy][zz] += 1.;
+                });
+                
+                long int LL = (x_n_bin)*(y_n_bin)*(z_n_bin);
+                long int not_empty=0;
+                
+                // Applying GEM3 amplification
+                for(int xx = 0; xx<x_n_bin-1; xx++){
+                    for(int yy=0; yy<y_n_bin-1; yy++) {
+                        for(int zz=0; zz<z_n_bin-1; zz++){
+                            if(hc[xx][yy][zz] != 0.) {
+                                not_empty++;
+                                hout[xx][yy]+=Nph_saturation(hc[xx][yy][zz], optA, optbeta);
+                            }
+                        }
                     }
                 }
+                
+                cout<<"Sparse-ness of voxel region: "<< not_empty * 100./LL<<" %"<<endl;
             }
             
         }
