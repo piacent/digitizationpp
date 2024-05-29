@@ -47,9 +47,9 @@ Documentation should be then available at `doc/html/index.html`.
 Put all the MC `.root` files you want to digitize in an input folder (<input_folder>)
 Move to a desired folder where to launch the code
 
-`./<path_to_build-dir>/digitizationpp ..<path_to_digitizationpp-dir>/config/ConfigFile_new.txt -I <path_to_input_folder> -O <path_to_output_folder>`
+`./<path_to_build-dir>/digitizationpp <path_to_digitizationpp-dir>/config/ConfigFile_new.txt -I <path_to_input_folder> -O <path_to_output_folder>`
 
-If not existing, the <outdir> will be created. The -I and -O options can be droppped and the code will search inputfiles in
+If not existing, the Outdir will be created. The -I and -O options can be droppped and the code will search inputfiles in
 `<path_to_digitizationpp-dir>/input/`
 and the outdir will be created in 
 `<path_to_digitizationpp-dir>/OutDir/`
