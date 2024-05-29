@@ -1,6 +1,9 @@
 //CALL: ./progname.exe Configfile -I inputdir -O outputdir
 
 #include <iostream>
+#include <unistd.h>
+#include <limits.h>
+#include <sstream>
 #include <fstream>
 #include <chrono>
 #include <map>
@@ -37,6 +40,7 @@ int x_ini = 0;
 int y_ini = 0;
 int z_ini = 0;
 
+vector<string> split(const string& , char );
 void ReadConfig(string name, map<string,string>& options);
 void ReadG4Isotopes(string name, map<string,string>& dict_isotopes);
 void ReadIonlist(string name, vector<vector<string>>& ionlist);
@@ -102,12 +106,22 @@ int main(int argc, char** argv)
 {
     string outfolder;
     string infolder;
+   
     if(argc<2) {cerr<<"No Configfile given!!\nSuggested use: ./progname.exe Configfile -I inputdir -O outputdir"; exit(EXIT_FAILURE);}
     string nome=argv[1];
+    
+    vector<string> path_to_config=split(nome,'/');
+    string parte= "";
+    for(int i=0;i<path_to_config.size()-2;i++) parte=parte+path_to_config[i]+ "/";
+    char buffer[PATH_MAX];
+    getcwd(buffer,sizeof(buffer));
+    string currentPath(buffer);
+    const string SOURCE_DIR= currentPath+"/"+parte;
+   
     if(argc<3)
     {
-        infolder="../input/";
-        outfolder="../OutDir/";
+        infolder=SOURCE_DIR+"/input/";
+        outfolder=SOURCE_DIR+"/OutDir/";
     }
     else
     {
@@ -121,7 +135,7 @@ int main(int argc, char** argv)
         if(parseop=="-I") {infolder=argv[3]; outfolder=argv[5];}
         else {infolder=argv[5]; outfolder=argv[3];}
     }
-	
+
     // DEBUG
     // cout<<"Input Folder: "<<infolder<<endl;
     // cout<<"Output Folder: "<<outfolder<<endl;
@@ -164,7 +178,7 @@ int main(int argc, char** argv)
     if(! filesystem::exists(outfolder)){
         //DEBUG
         cout<<"Creating oufolder..."<<
-        system(("mkdir " + outfolder).c_str() );
+        system(("mkdir -p" + outfolder).c_str() );
     }
     
     map<string, string> dict_isotopes;
@@ -422,7 +436,7 @@ int main(int argc, char** argv)
             
             TH2F VignMap;
             if(options["Vignetting"]=="True") {
-                string vignfilename = Form("../VignettingMap/%s", options["Vig_Map"].c_str());
+                string vignfilename = Form("%sVignettingMap/%s",SOURCE_DIR.c_str(), options["Vig_Map"].c_str());
                 cout<<"Opening "<<vignfilename<<"..."<<endl;
                 auto VignFile = unique_ptr<TFile> {TFile::Open(vignfilename.c_str())};
                 
@@ -965,6 +979,17 @@ int main(int argc, char** argv)
 }
 
 // ====== FUNCTIONS DEFINITION ======
+vector<string> split(const string& str, char delimiter)
+{
+    vector<string> tokens;
+    istringstream stream(str);
+    string token;
+
+    while(getline(stream,token,delimiter)) tokens.push_back(token);
+
+    return tokens;
+}
+
 
 void ReadConfig(string name, map<string,string>& options)
 {
@@ -1342,7 +1367,7 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         // If voxel regions <= 2 -> use the standard algorithm, otherwise use the map algorithm
         bool map_algorithm = true;
         if( x_n_bin * y_n_bin * z_n_bin_MAX < 2*max_3Dhisto_volume) map_algorithm = false;
-        
+
         long int z_n_bin;
         if (map_algorithm) z_n_bin = z_n_bin_MAX;
         
@@ -1368,7 +1393,7 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
             long int M = y_n_bin;
             long int N = z_n_bin;
             
-            for_each(indices.begin(), indices.end(), [&](int ihit) {
+            for_each(execution::par,indices.begin(), indices.end(), [&](int ihit) {
                 long int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
                 long int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
                 long int zz = floor((S3D_z[ihit]- zmin)/ zbin_dim);
@@ -1425,7 +1450,7 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                 cout<<"Amplifying voxel region z=["<<split_vals[i]<<","<<split_vals[i+1]<<"] "<<i<<"/"<<split_vals.size()-1-1<<endl;
                 
                 // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
-                for_each(indices.begin(), indices.end(), [&](int ihit) {
+                for_each(execution::par,indices.begin(), indices.end(), [&](int ihit) {
                     int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
                     int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
                     int zz = floor((S3D_z[ihit]-split_vals[i])/ zbin_dim);
