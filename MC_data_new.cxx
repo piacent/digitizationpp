@@ -9,7 +9,7 @@
 #include <map>
 #include <random>
 #include <string>
-#include <execution>
+//#include <execution>
 #include <numeric>
 #include <algorithm>
 #include <cmath>
@@ -112,7 +112,7 @@ int main(int argc, char** argv)
     
     vector<string> path_to_config=split(nome,'/');
     string parte= "";
-    for(int i=0;i<path_to_config.size()-2;i++) parte=parte+path_to_config[i]+ "/";
+    for(unsigned int i=0;i<path_to_config.size()-2;i++) parte=parte+path_to_config[i]+ "/";
     char buffer[PATH_MAX];
     getcwd(buffer,sizeof(buffer));
     string currentPath(buffer);
@@ -1393,7 +1393,8 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
             long int M = y_n_bin;
             long int N = z_n_bin;
             
-            for_each(execution::par,indices.begin(), indices.end(), [&](int ihit) {
+            //for_each(execution::par,indices.begin(), indices.end(), [&](int ihit) {
+            for_each(indices.begin(), indices.end(), [&](int ihit) {
                 long int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
                 long int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
                 long int zz = floor((S3D_z[ihit]- zmin)/ zbin_dim);
@@ -1450,7 +1451,8 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                 cout<<"Amplifying voxel region z=["<<split_vals[i]<<","<<split_vals[i+1]<<"] "<<i<<"/"<<split_vals.size()-1-1<<endl;
                 
                 // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
-                for_each(execution::par,indices.begin(), indices.end(), [&](int ihit) {
+                //for_each(execution::par,indices.begin(), indices.end(), [&](int ihit) {
+                for_each(indices.begin(), indices.end(), [&](int ihit) {
                     int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
                     int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
                     int zz = floor((S3D_z[ihit]-split_vals[i])/ zbin_dim);
