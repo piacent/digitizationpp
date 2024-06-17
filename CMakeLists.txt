@@ -6,16 +6,9 @@ find_package(OpenCV CONFIG REQUIRED)
 
 add_compile_options(-Wall -Wextra -O3)
 
-#Finds c++ standard from ROOT and forces it to the compiler
-if(DEFINED ROOT_CXX_FLAGS)
-    #Extract  c++std info
-    string(REGEX MATCH "-std=c\\+\\+[0-9]+" STD_FLAGS ${ROOT_CXX_FLAGS})
-    string(REGEX REPLACE "-std=c\\+\\+" "" ROOT_CXX ${STD_FLAGS})
-endif()
-
-if(ROOT_CXX STREQUAL "20")
+if(ROOT_CXX_STANDARD STREQUAL "20")
     set(CMAKE_CXX_STANDARD 20)
-elseif(ROOT_CXX STREQUAL "17")
+elseif(ROOT_CXX_STANDARD STREQUAL "17")
     set(CMAKE_CXX_STANDARD 17)
 else()
     message(FATAL_ERROR "ROOT compiled with non-supported C++ version. c++17 and 20 are supported")
