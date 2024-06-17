@@ -13,7 +13,7 @@ Digitization code in C++
 Detailed instructions for Mac OS M1 users:
   * [ROOT installation](doc/ROOT.md)
   * [ROOTAna installation](doc/ROOTAna.md)
-  * [OpenCV](doc/OpenCV.md)
+  * [OpenCV installation](doc/OpenCV.md)
 
 Before compiling, set the variables ROOTANASYS and OPENCVSYS in your environment:
 
