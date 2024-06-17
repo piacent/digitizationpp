@@ -10,6 +10,11 @@ Digitization code in C++
 * ROOTANA [https://bitbucket.org/tmidas/rootana/src/master/]
 * OPENCV [https://docs.opencv.org/4.x/d7/d9f/tutorial_linux_install.html]
 
+Detailed instructions for Mac OS M1 users:
+  * [ROOT installation](doc/ROOT.md)
+  * [ROOTAna installation](doc/ROOTAna.md)
+  * [OpenCV](doc/OpenCV.md)
+
 Before compiling, set the variables ROOTANASYS and OPENCVSYS in your environment:
 
 `export ROOTANASYS="/path/to/rootana/installation/"`
