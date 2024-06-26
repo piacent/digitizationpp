@@ -414,7 +414,7 @@ int main(int argc, char** argv)
             inputtree->SetBranchAddress("eventnumber", &eventnumber);
             inputtree->SetBranchAddress("numhits", &numhits);
             
-            if(options["NR"]=="False") { // TO BE CHECK ON REAL SRIM SIMULATIONS
+            if(options["SRIM"]=="False") { // TO BE CHECK ON REAL SRIM SIMULATIONS
                 inputtree->SetBranchAddress("energyDep",    &energyDep);
                 inputtree->SetBranchAddress("energyDep_NR", &energyDep_NR);
                 inputtree->SetBranchAddress("pdgID_hits",    &pdgID_hits);
@@ -465,20 +465,20 @@ int main(int argc, char** argv)
                 
                 cout<<"Entry "<<entry<<" of "<<totev<<endl;
                 
-                if (options["NR"]=="True"){
+                if (options["SRIM"]=="True"){
                     cout<<"Energy "<<ekin_particle<<" keV"<<endl;
                 } else {
                     cout<<"Energy "<<energyDep    <<" keV"<<endl;
                 }
                 
                 if(options["NR"]=="False" && energyDep>900    ) continue;
-                if(options["NR"]=="True"  && ekin_particle>900) continue;
+                if(options["SRIM"]=="True"  && ekin_particle>900) continue;
                 
                 //initialize array values - to save info also if the track is skipped (background only)
                 row_cut         = -1;
                 eventnumber_out = eventnumber;
                 
-                if(options["NR"] == "True") {
+                if(options["SRIM"] == "True") {
                     energy            = ekin_particle;
                     particle_type_out = particle_type;
                 } else {
@@ -556,7 +556,7 @@ int main(int argc, char** argv)
                 vector<double> z_hits_tr;
                 
 
-                if (options["NR"]=="True") {
+                if (options["SRIM"]=="True") {
                     // x_hits_tr = np.array(tree.x_hits) + opt.x_offset
                     // y_hits_tr = np.array(tree.y_hits) + opt.y_offset
                     // z_hits_tr = np.array(tree.z_hits) + opt.z_offset
@@ -939,7 +939,7 @@ int main(int argc, char** argv)
                     theta = -999;
                 }
                 
-                if(options["NR"]=="False") {
+                if(options["SRIM"]=="False") {
                     track_length_3D = accumulate(tracklen_hits->begin(), tracklen_hits->end(), 0.0);
                     px              = (*px_particle)[0];
                     py              = (*py_particle)[0];
