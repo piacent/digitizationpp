@@ -75,20 +75,20 @@ void cloud_smearing3D(vector<double>& x_hits_tr,
                       vector<double>& z_hits_tr,
                       vector<double>& energy_hits,
                       map<string,string>& options,
-                      vector<double>& S3D_x,
-                      vector<double>& S3D_y,
-                      vector<double>& S3D_z);
+                      vector<float>& S3D_x,
+                      vector<float>& S3D_y,
+                      vector<float>& S3D_z);
 
 void ph_smearing2D(vector<double>& x_hits_tr,
                    vector<double>& y_hits_tr,
                    vector<double>& z_hits_tr,
                    vector<double>& energy_hits,
                    map<string,string>& options,
-                   vector<double>& S2D_x,
-                   vector<double>& S2D_y) ;
+                   vector<float>& S2D_x,
+                   vector<float>& S2D_y) ;
 
 vector<double> compute_sigma(const double diff_const, const double diff_coeff, const vector<double>& dz);
-vector<double> smear(const vector<double>& axis_hit, const vector<double>& axis_sigma, const vector<double>& nel);
+vector<float> smear(const vector<double>& axis_hit, const vector<double>& axis_sigma, const vector<double>& nel);
 
 vector<double> arange(double start, double stop, double step);
 double round_up_to_even(const double f);
@@ -1329,24 +1329,28 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                                   ) {
     
     // vectorized smearing
-    vector<double> S3D_x;
-    vector<double> S3D_y;
-    vector<double> S3D_z;
-    cloud_smearing3D(x_hits_tr, y_hits_tr, z_hits_tr, energy_hits, options, S3D_x, S3D_y, S3D_z);
+    //vector<float> S3D_x;
+    //vector<float> S3D_y;
+    //vector<float> S3D_z;
+    //cout<<"Starting 3D diffusion smearing..."<<endl;
+    //cloud_smearing3D(x_hits_tr, y_hits_tr, z_hits_tr, energy_hits, options, S3D_x, S3D_y, S3D_z);
     
+    //cout<<"Starting voxelization..."<<endl;
     // if there are no electrons on GEM3, just use empty image
-    if (S3D_x.size() == 0) return;
+    if (x_hits_tr.size() == 0) return;
     // if there are electrons on GEM3, apply saturation effect
     else {
         // numpy histo is faster than ROOT histo
         //histo_cloud_entries = np.array([S3D_x, S3D_y, S3D_z]).transpose();
         //histo_cloud_entries = histo_cloud_entries[histo_cloud_entries[:, 2].argsort()]
-        double xmin = (*min_element(S3D_x.begin(), S3D_x.end()));
-        double xmax = (*max_element(S3D_x.begin(), S3D_x.end()));
-        double ymin = (*min_element(S3D_y.begin(), S3D_y.end()));
-        double ymax = (*max_element(S3D_y.begin(), S3D_y.end()));
-        double zmin = (*min_element(S3D_z.begin(), S3D_z.end()));
-        double zmax = (*max_element(S3D_z.begin(), S3D_z.end()));
+        double OFF = 10.;
+        
+        double xmin = (*min_element(x_hits_tr.begin(), x_hits_tr.end()))-OFF;
+        double xmax = (*max_element(x_hits_tr.begin(), x_hits_tr.end()))+OFF;
+        double ymin = (*min_element(y_hits_tr.begin(), y_hits_tr.end()))-OFF;
+        double ymax = (*max_element(y_hits_tr.begin(), y_hits_tr.end()))+OFF;
+        double zmin = (*min_element(z_hits_tr.begin(), z_hits_tr.end()))-OFF;
+        double zmax = (*max_element(z_hits_tr.begin(), z_hits_tr.end()))+OFF;
         
         double deltaX = abs(xmax-xmin);
         double deltaY = abs(ymax-ymin);
@@ -1372,7 +1376,7 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         if (map_algorithm) z_n_bin = z_n_bin_MAX;
         
         // DEBUG
-        cout<<"size = "<<S3D_z.size()<<endl;
+        //cout<<"size = "<<S3D_z.size()<<endl;
         
         double optA                 = stod(options["A"]);
         double optbeta              = stod(options["beta"]);
@@ -1384,33 +1388,87 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         if(map_algorithm) {
             map<long int, int> hcmap;
             
-            vector<size_t> indices(S3D_z.size());
-            // Fill indices with 0, 1, 2, ..., numbers.size() - 1
-            iota(indices.begin(), indices.end(), 0);
-            
-            // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
             //long int L = x_n_bin-1;
             long int M = y_n_bin;
             long int N = z_n_bin;
             
-            //for_each(execution::par,indices.begin(), indices.end(), [&](int ihit) {
-            for_each(indices.begin(), indices.end(), [&](int ihit) {
-                long int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
-                long int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
-                long int zz = floor((S3D_z[ihit]- zmin)/ zbin_dim);
-                long int map_index = xx * (M * N) + yy * N + zz;
+            if(options["NR"]=="True") {
+                int WID = 5;
+                int nparts = 1 + x_hits_tr.size()/WID;
+                for(int part = 0; part < nparts; part++) {
+                    int hit_tr_idx = part*WID;
+                    int hit_tr_idx_up = min((part+1)*WID,(int)x_hits_tr.size());
+                    vector<float> S3D_x;
+                    vector<float> S3D_y;
+                    vector<float> S3D_z;
+                    
+                    vector<double> x_hits_tr_i(&x_hits_tr[hit_tr_idx], &x_hits_tr[hit_tr_idx_up]);
+                    vector<double> y_hits_tr_i(&y_hits_tr[hit_tr_idx], &y_hits_tr[hit_tr_idx_up]);
+                    vector<double> z_hits_tr_i(&z_hits_tr[hit_tr_idx], &z_hits_tr[hit_tr_idx_up]);
+                    vector<double> energy_hits_i(&energy_hits[hit_tr_idx], &energy_hits[hit_tr_idx_up]);
+                    
+                    cloud_smearing3D(x_hits_tr_i, y_hits_tr_i, z_hits_tr_i, energy_hits_i, options, S3D_x, S3D_y, S3D_z);
+                    
+                    
+                    vector<size_t> indices(S3D_z.size());
+                    // Fill indices with 0, 1, 2, ..., numbers.size() - 1
+                    iota(indices.begin(), indices.end(), 0);
+                    
+
+                    // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
+                    //for_each(execution::par,indices.begin(), indices.end(), [&](int ihit) {
+                    for_each(indices.begin(), indices.end(), [&](int ihit) {
+                        long int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
+                        long int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
+                        long int zz = floor((S3D_z[ihit]- zmin)/ zbin_dim);
+                        long int map_index = xx * (M * N) + yy * N + zz;
+                        
+                        if (hcmap.find(map_index) == hcmap.end()) hcmap[map_index] = 1;
+                        else hcmap[map_index] += 1;
+                        
+                    });
+                }
+
+                // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
+                for(auto const& [key, val] : hcmap) {
+                    int zz = key % N ;
+                    int yy = ((key - zz) / N) % M;
+                    int xx = (key - yy * N - zz) / N / M;
+                    hout[xx][yy]+=Nph_saturation(val, optA, optbeta);
+                }
                 
-                if (hcmap.find(map_index) == hcmap.end()) hcmap[map_index] = 1;
-                else hcmap[map_index] += 1;
+            } else {
+                vector<float> S3D_x;
+                vector<float> S3D_y;
+                vector<float> S3D_z;
                 
-            });
+                
+                cloud_smearing3D(x_hits_tr, y_hits_tr, z_hits_tr, energy_hits, options, S3D_x, S3D_y, S3D_z);
+
+                vector<size_t> indices(S3D_z.size());
+                // Fill indices with 0, 1, 2, ..., numbers.size() - 1
+                iota(indices.begin(), indices.end(), 0);
             
-            for(auto const& [key, val] : hcmap) {
-                int zz = key % N ;
-                int yy = ((key - zz) / N) % M;
-                int xx = (key - yy * N - zz) / N / M;
-                hout[xx][yy]+=Nph_saturation(val, optA, optbeta);
-                
+            
+                //for_each(execution::par,indices.begin(), indices.end(), [&](int ihit) {
+                for_each(indices.begin(), indices.end(), [&](int ihit) {
+                    long int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
+                    long int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
+                    long int zz = floor((S3D_z[ihit]- zmin)/ zbin_dim);
+                    long int map_index = xx * (M * N) + yy * N + zz;
+                    
+                    if (hcmap.find(map_index) == hcmap.end()) hcmap[map_index] = 1;
+                    else hcmap[map_index] += 1;
+                    
+                });
+            
+                for(auto const& [key, val] : hcmap) {
+                    int zz = key % N ;
+                    int yy = ((key - zz) / N) % M;
+                    int xx = (key - yy * N - zz) / N / M;
+                    hout[xx][yy]+=Nph_saturation(val, optA, optbeta);
+                    
+                }
             }
             
         } else {
@@ -1423,58 +1481,138 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
             vector<double> split_vals = arange(zmin, zmax, deltaZ);
             if(split_vals[split_vals.size()-1] < zmax) split_vals.push_back(zmax+deltaZ/10.);
         
-        
-        
+            
             for(unsigned int i=0; i < split_vals.size()-1; i++) {
                 
-                // Vector to store all indices
-                vector<size_t> allindices(S3D_z.size());
-                // Fill indices with 0, 1, 2, ..., numbers.size() - 1
-                iota(allindices.begin(), allindices.end(), 0);
-                
-                // Getting the indices where split_vals[i] <= S3D_z < split_vals[i+1]
-                vector<size_t> indices;
-                copy_if(allindices.begin(), allindices.end(), back_inserter(indices), [&](size_t n) {
-                    return ( S3D_z[n] >= split_vals[i] && S3D_z[n] < split_vals[i+1]);
-                });
-                
-                if(indices.size()==0) continue;
-                
                 z_n_bin  = max(2.0, round_up_to_even((split_vals[i+1]-split_vals[i])/zbin_dim));
-                
                 vector<vector<vector<double>>> hc(x_n_bin+1,
                                                   vector<vector<double>>(y_n_bin+1,
                                                                          vector<double>(z_n_bin+1, 0.0)));
                 
-                
-                //cout<<"DEBUG "<<hc.size()<<","<<hc[0].size()<<","<<hc[0][0].size()<<endl<<flush;
-                cout<<"Amplifying voxel region z=["<<split_vals[i]<<","<<split_vals[i+1]<<"] "<<i<<"/"<<split_vals.size()-1-1<<endl;
-                
-                // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
-                //for_each(execution::par,indices.begin(), indices.end(), [&](int ihit) {
-                for_each(indices.begin(), indices.end(), [&](int ihit) {
-                    int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
-                    int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
-                    int zz = floor((S3D_z[ihit]-split_vals[i])/ zbin_dim);
-                    hc[xx][yy][zz] += 1.;
-                });
-                
-                long int LL = (x_n_bin)*(y_n_bin)*(z_n_bin);
-                long int not_empty=0;
-                
-                // Applying GEM3 amplification
-                for(int xx = 0; xx<x_n_bin-1; xx++){
-                    for(int yy=0; yy<y_n_bin-1; yy++) {
-                        for(int zz=0; zz<z_n_bin-1; zz++){
-                            if(hc[xx][yy][zz] != 0.) {
-                                not_empty++;
-                                hout[xx][yy]+=Nph_saturation(hc[xx][yy][zz], optA, optbeta);
+                if(options["NR"]=="True") {
+
+                    int WID = 5;
+                    int nparts = 1 + x_hits_tr.size()/WID;
+                    
+                    //cout<<"DEBUG "<<hc.size()<<","<<hc[0].size()<<","<<hc[0][0].size()<<endl<<flush;
+                    cout<<"Amplifying voxel region z=["<<split_vals[i]<<","<<split_vals[i+1]<<"] "<<i<<"/"<<split_vals.size()-1-1<<endl;
+                    
+                    for(int part = 0; part < nparts; part++) {
+                        cout<<"   part "<<part<<"/"<<nparts<<"..."<<endl;
+                        int hit_tr_idx = part*WID;
+                        int hit_tr_idx_up = min((part+1)*WID,(int)x_hits_tr.size());
+                        vector<float> S3D_x;
+                        vector<float> S3D_y;
+                        vector<float> S3D_z;
+                    
+                        vector<double> x_hits_tr_i(&x_hits_tr[hit_tr_idx], &x_hits_tr[hit_tr_idx_up]);
+                        vector<double> y_hits_tr_i(&y_hits_tr[hit_tr_idx], &y_hits_tr[hit_tr_idx_up]);
+                        vector<double> z_hits_tr_i(&z_hits_tr[hit_tr_idx], &z_hits_tr[hit_tr_idx_up]);
+                        vector<double> energy_hits_i(&energy_hits[hit_tr_idx], &energy_hits[hit_tr_idx_up]);
+                        
+                        //cout<<"Smearing..."<<endl<<flush;
+                        cloud_smearing3D(x_hits_tr_i, y_hits_tr_i, z_hits_tr_i, energy_hits_i, options, S3D_x, S3D_y, S3D_z);
+                        
+                        //cout<<"----- x "<<S3D_x.size()<<endl<<flush;
+                        //cout<<"----- y "<<S3D_y.size()<<endl<<flush;
+                        //cout<<"----- z "<<S3D_z.size()<<endl<<flush;
+                        
+                        //cout<<"Getting the vector to store all indices"<<endl<<flush;
+                        // Vector to store all indices
+                        vector<size_t> allindices(S3D_z.size());
+                        // Fill indices with 0, 1, 2, ..., numbers.size() - 1
+                        iota(allindices.begin(), allindices.end(), 0);
+                        
+                    
+                        //cout<<"Getting the indices where split_vals[i] <= S3D_z < split_vals[i+1]"<<endl<<flush;
+                        // Getting the indices where split_vals[i] <= S3D_z < split_vals[i+1]
+                        vector<size_t> indices;
+                        copy_if(allindices.begin(), allindices.end(), back_inserter(indices), [&](size_t n) {
+                            return ( S3D_z[n] >= split_vals[i] && S3D_z[n] < split_vals[i+1]);
+                        });
+                        
+                        if(indices.size()==0) continue;
+                        
+                        //cout<<"Filling hc..."<<endl<<flush;
+                        // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
+                        //for_each(execution::par,indices.begin(), indices.end(), [&](int ihit) {
+                        for_each(indices.begin(), indices.end(), [&](int ihit) {
+                            int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
+                            int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
+                            int zz = floor((S3D_z[ihit]-split_vals[i])/ zbin_dim);
+                            hc[xx][yy][zz] += 1.;
+                        });
+                    }
+
+                    long int LL = (x_n_bin)*(y_n_bin)*(z_n_bin);
+                    long int not_empty=0;
+                    
+                    // Applying GEM3 amplification
+                    for(int xx = 0; xx<x_n_bin-1; xx++){
+                        for(int yy=0; yy<y_n_bin-1; yy++) {
+                            for(int zz=0; zz<z_n_bin-1; zz++){
+                                if(hc[xx][yy][zz] != 0.) {
+                                    not_empty++;
+                                    hout[xx][yy]+=Nph_saturation(hc[xx][yy][zz], optA, optbeta);
+                                }
                             }
                         }
                     }
+            
+                    cout<<"Sparse-ness of voxel region: "<< not_empty * 100./LL<<" %"<<endl;
+
+
+                } else {
+                    vector<float> S3D_x;
+                    vector<float> S3D_y;
+                    vector<float> S3D_z;
+
+                    cloud_smearing3D(x_hits_tr, y_hits_tr, z_hits_tr, energy_hits, options, S3D_x, S3D_y, S3D_z);
+
+                    // Vector to store all indices
+                    vector<size_t> allindices(S3D_z.size());
+                    // Fill indices with 0, 1, 2, ..., numbers.size() - 1
+                    iota(allindices.begin(), allindices.end(), 0);
+            
+                    // Getting the indices where split_vals[i] <= S3D_z < split_vals[i+1]
+                    vector<size_t> indices;
+                    copy_if(allindices.begin(), allindices.end(), back_inserter(indices), [&](size_t n) {
+                        return ( S3D_z[n] >= split_vals[i] && S3D_z[n] < split_vals[i+1]);
+                    });
+            
+                    if(indices.size()==0) continue;
+                
+                
+                    //cout<<"DEBUG "<<hc.size()<<","<<hc[0].size()<<","<<hc[0][0].size()<<endl<<flush;
+                    cout<<"Amplifying voxel region z=["<<split_vals[i]<<","<<split_vals[i+1]<<"] "<<i<<"/"<<split_vals.size()-1-1<<endl;
+                    // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
+                    //for_each(execution::par,indices.begin(), indices.end(), [&](int ihit) {
+                    for_each(indices.begin(), indices.end(), [&](int ihit) {
+                        int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
+                        int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
+                        int zz = floor((S3D_z[ihit]-split_vals[i])/ zbin_dim);
+                        hc[xx][yy][zz] += 1.;
+                    });
+
+                    long int LL = (x_n_bin)*(y_n_bin)*(z_n_bin);
+                    long int not_empty=0;
+                    
+                    // Applying GEM3 amplification
+                    for(int xx = 0; xx<x_n_bin-1; xx++){
+                        for(int yy=0; yy<y_n_bin-1; yy++) {
+                            for(int zz=0; zz<z_n_bin-1; zz++){
+                                if(hc[xx][yy][zz] != 0.) {
+                                    not_empty++;
+                                    hout[xx][yy]+=Nph_saturation(hc[xx][yy][zz], optA, optbeta);
+                                }
+                            }
+                        }
+                    }
+                        
+                    cout<<"Sparse-ness of voxel region: "<< not_empty * 100./LL<<" %"<<endl;
+
                 }
                 
-                cout<<"Sparse-ness of voxel region: "<< not_empty * 100./LL<<" %"<<endl;
             }
             
         }
@@ -1529,8 +1667,8 @@ void compute_cmos_without_saturation(vector<double>& x_hits_tr,
     vector<vector<double>> signal(stoi(options["x_pix"]),
                                   vector<double>(stoi(options["y_pix"]), 0.0));
     
-    vector<double> S2D_x;
-    vector<double> S2D_y;
+    vector<float> S2D_x;
+    vector<float> S2D_y;
     ph_smearing2D(x_hits_tr,
                   y_hits_tr,
                   z_hits_tr,
@@ -1576,9 +1714,9 @@ void cloud_smearing3D(vector<double>& x_hits_tr,
                       vector<double>& z_hits_tr,
                       vector<double>& energy_hits,
                       map<string,string>& options,
-                      vector<double>& S3D_x,
-                      vector<double>& S3D_y,
-                      vector<double>& S3D_z) {
+                      vector<float>& S3D_x,
+                      vector<float>& S3D_y,
+                      vector<float>& S3D_z) {
     
     vector<double> nel = NelGEM2(energy_hits, z_hits_tr, options);
     //DEBUG
@@ -1598,6 +1736,8 @@ void cloud_smearing3D(vector<double>& x_hits_tr,
     S3D_y = smear(y_hits_tr, sigma_y, nel);
     S3D_z = smear(z_hits_tr, sigma_z, nel);
     
+    //cout<<"3D vectors are "<<S3D_x.size()<<" long ["<<S3D_x.size()*sizeof(float)/1024./1024./1024.<<" GB]"<<endl;
+    
     // DEBUG
     //for(unsigned int i=0; i<S3D_x.size(); i++) {
     //    cout<<S3D_x[i]<<endl;
@@ -1611,8 +1751,8 @@ void ph_smearing2D(vector<double>& x_hits_tr,
                    vector<double>& z_hits_tr,
                    vector<double>& energy_hits,
                    map<string,string>& options,
-                   vector<double>& S2D_x,
-                   vector<double>& S2D_y) {
+                   vector<float>& S2D_x,
+                   vector<float>& S2D_y) {
     
     // Electrons in GEM2
     vector<double> nel = NelGEM2(energy_hits, z_hits_tr, options);
@@ -1646,11 +1786,11 @@ vector<double> compute_sigma(const double diff_const, const double diff_coeff, c
     return sigmas;
 }
     
-vector<double> smear(const vector<double>& axis_hit, const vector<double>& axis_sigma, const vector<double>& nel) {
+vector<float> smear(const vector<double>& axis_hit, const vector<double>& axis_sigma, const vector<double>& nel) {
     
     long int nelsum = accumulate(nel.begin(), nel.end(), (long int)0);
     
-    vector<double> X(nelsum, 0.0);
+    vector<float> X(nelsum, 0.0);
     
     // Create a vector of indices where each index i is repeated nel[i] times
     vector<long int> indices(nelsum);
@@ -1667,7 +1807,7 @@ vector<double> smear(const vector<double>& axis_hit, const vector<double>& axis_
     
     // Fill X with Gaussian-distributed values based on axis_hit and axis_sigma
     transform(indices.begin(), indices.end(), X.begin(), [&](int i) {
-        return gRandom->Gaus(axis_hit[i], axis_sigma[i]);
+        return (float)gRandom->Gaus(axis_hit[i], axis_sigma[i]);
     });
     
     return X;

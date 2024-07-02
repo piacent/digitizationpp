@@ -38,3 +38,5 @@ OutDir
 tmp
 doc/html
 doc/latex
+build
+.vscode
