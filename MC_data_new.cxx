@@ -69,7 +69,8 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                                   vector<double>& energy_hits,
                                   map<string,string>& options,
                                   vector<vector<double>>& array2d_Nph,
-                                  Float_t energy);
+                                  Float_t energy,
+                                  bool NR_flag);
 
 void compute_cmos_without_saturation(vector<double>& x_hits_tr,
                                      vector<double>& y_hits_tr,
@@ -488,26 +489,33 @@ int main(int argc, char** argv)
                 } else {
                     cout<<"Energy "<<energyDep    <<" keV"<<endl;
                 }
-                
-                if(options["NR"]=="False" && energyDep>900    ) continue;
-                if(options["SRIM"]=="True"  && ekin_particle>900) continue;
-                
-                //initialize array values - to save info also if the track is skipped (background only)
-                row_cut         = -1;
-                eventnumber_out = eventnumber;
-                
+
+                bool NR_flag=false;
                 if(options["SRIM"] == "True") {
                     energy            = ekin_particle;
                     particle_type_out = particle_type;
+                    //if(particle_type_out==??) NR_flag=true;       Not known output from SRIM
                 } else {
                     // this would be the energy of the primary particle - equal to
                     // deposited energy only if it is completely contained in the sensitive volume
                     // energy = ekin_particle * 1000;
                     energy = energyDep;
-                    if (energyDep_NR>0) particle_type_out = is_NR(*pdgID_hits, int(1.e9));
+                    if (energyDep_NR>0){
+                        particle_type_out = is_NR(*pdgID_hits, int(1.e9));
+                        NR_flag = true;
+                    } 
                     else particle_type_out = (*pdgID_hits)[0];  // this will tell us if the deposit was
                     // started by a photon or an electron
                 }
+
+                if(options["NR"]=="False" && NR_flag==true ) continue;
+                if(options["SRIM"]=="True"  && ekin_particle>900) continue;     //not corrected for SRIM
+                
+                //initialize array values - to save info also if the track is skipped (background only)
+                row_cut         = -1;
+                eventnumber_out = eventnumber;
+                
+                
                 // DEBUG
                 //cout<<"energyDep_NR = "<<energyDep_NR<<endl;
                 //cout<<"particle_type_out = "<<particle_type_out<<endl;
@@ -780,7 +788,8 @@ int main(int argc, char** argv)
                                                  energy_hits,
                                                  options,
                                                  array2d_Nph,
-                                                 energy
+                                                 energy,
+                                                 NR_flag
                                                  );
                 } else {// no saturation
                     compute_cmos_without_saturation(x_hits_tr,
@@ -1345,7 +1354,8 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                                   vector<double>& energy_hits,
                                   map<string,string>& options,
                                   vector<vector<double>>& array2d_Nph,
-                                  Float_t energy
+                                  Float_t energy,
+                                  bool NR_flag
                                   ) {
     
     // vectorized smearing
@@ -1413,7 +1423,7 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
             long int M = y_n_bin;
             long int N = z_n_bin;
             
-            if(options["NR"]== "True" && energy>100){
+            if(NR_flag==true && energy>100){
                 
                 int WID = 20;
                 int nparts = 1 + x_hits_tr.size()/WID;
@@ -1599,7 +1609,7 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                                                   vector<vector<double>>(y_n_bin+1,
                                                                          vector<double>(z_n_bin+1, 0.0)));
                 
-                if(options["NR"]=="True" && energy>100) {
+                if(NR_flag==true && energy>100) {
                     
 
                     int WID = 20;
