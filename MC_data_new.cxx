@@ -68,7 +68,8 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                                   vector<double>& z_hits_tr,
                                   vector<double>& energy_hits,
                                   map<string,string>& options,
-                                  vector<vector<double>>& array2d_Nph);
+                                  vector<vector<double>>& array2d_Nph,
+                                  Float_t energy);
 
 void compute_cmos_without_saturation(vector<double>& x_hits_tr,
                                      vector<double>& y_hits_tr,
@@ -778,7 +779,8 @@ int main(int argc, char** argv)
                                                  z_hits_tr,
                                                  energy_hits,
                                                  options,
-                                                 array2d_Nph
+                                                 array2d_Nph,
+                                                 energy
                                                  );
                 } else {// no saturation
                     compute_cmos_without_saturation(x_hits_tr,
@@ -1342,36 +1344,34 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                                   vector<double>& z_hits_tr,
                                   vector<double>& energy_hits,
                                   map<string,string>& options,
-                                  vector<vector<double>>& array2d_Nph
+                                  vector<vector<double>>& array2d_Nph,
+                                  Float_t energy
                                   ) {
     
     // vectorized smearing
     vector<float> S3D_x;
     vector<float> S3D_y;
     vector<float> S3D_z;
-    auto startsmear = std::chrono::steady_clock::now();
-    cloud_smearing3D(x_hits_tr, y_hits_tr, z_hits_tr, energy_hits, options, S3D_x, S3D_y, S3D_z);
-    auto endsmear = std::chrono::steady_clock::now();
+    
     // if there are no electrons on GEM3, just use empty image
-    if (S3D_x.size() == 0) return;
+    if (x_hits_tr.size() == 0) return;
     // if there are electrons on GEM3, apply saturation effect
     else {
-        // numpy histo is faster than ROOT histo
-        //histo_cloud_entries = np.array([S3D_x, S3D_y, S3D_z]).transpose();
-        //histo_cloud_entries = histo_cloud_entries[histo_cloud_entries[:, 2].argsort()]
-        double xmin = (*min_element(S3D_x.begin(), S3D_x.end()));
-        double xmax = (*max_element(S3D_x.begin(), S3D_x.end()));
-        double ymin = (*min_element(S3D_y.begin(), S3D_y.end()));
-        double ymax = (*max_element(S3D_y.begin(), S3D_y.end()));
-        double zmin = (*min_element(S3D_z.begin(), S3D_z.end()));
-        double zmax = (*max_element(S3D_z.begin(), S3D_z.end()));
+        double OFF = 10.;
+
+        double xmin = (*min_element(x_hits_tr.begin(), x_hits_tr.end()))-OFF;
+        double xmax = (*max_element(x_hits_tr.begin(), x_hits_tr.end()))+OFF;
+        double ymin = (*min_element(y_hits_tr.begin(), y_hits_tr.end()))-OFF;
+        double ymax = (*max_element(y_hits_tr.begin(), y_hits_tr.end()))+OFF;
+        double zmin = (*min_element(z_hits_tr.begin(), z_hits_tr.end()))-OFF;
+        double zmax = (*max_element(z_hits_tr.begin(), z_hits_tr.end()))+OFF;
         
         double deltaX = abs(xmax-xmin);
         double deltaY = abs(ymax-ymin);
         
         // FIXME: create a function for the saturation loop
         // FIXME: find best value of maxvolume. 1e8 might not me the best one
-        long int max_3Dhisto_volume=(long int)1e+8;  // (volume in number of voxels) that's around 0.5*1.6 GB of RAM
+        long int max_3Dhisto_volume=(long int)5e+7;  // (volume in number of voxels) that's around 0.5*1.6 GB of RAM
         
         double xbin_dim = stod(options["x_vox_dim"]); //opt.x_dim/opt.x_pix
         double ybin_dim = stod(options["y_vox_dim"]); //opt.y_dim/opt.y_pix
@@ -1390,98 +1390,195 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         if (map_algorithm) z_n_bin = z_n_bin_MAX;
         
         // DEBUG
-        cout<<"size = "<<S3D_z.size()<<endl;
+        //cout<<"size = "<<S3D_z.size()<<endl;
+        //std::chrono::duration<double> dur=endsmear-startsmear;
+        //std::cout << "Time smear " << dur.count() << " seconds" <<std::endl;
         
         double optA                 = stod(options["A"]);
         double optbeta              = stod(options["beta"]);
         double optphotons_per_el    = stod(options["photons_per_el"]);
         double optcounts_per_photon = stod(options["counts_per_photon"]);
+
+        //Timing and debug variables
+        long int size_tot=0;
+        std::chrono::duration<double> dur_smear;
+        std::chrono::duration<double> dur_criti;
+        std::chrono::duration<double> dur_ampli;
         
         vector<vector<int>> hout(x_n_bin, vector<int>(y_n_bin, 0.0));
         
-        std::chrono::duration<double> dur=endsmear-startsmear;
-        std::cout << "Time smear " << dur.count() << " seconds" <<std::endl;
         if(map_algorithm) {
             map<long int, int> hcmap;
-            
-            auto startindi = std::chrono::steady_clock::now();
-
-            vector<size_t> indices(S3D_z.size());
-            // Fill indices with 0, 1, 2, ..., numbers.size() - 1
-            iota(indices.begin(), indices.end(), 0);
-            
-            auto stopindi = std::chrono::steady_clock::now();
-            // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
             //long int L = x_n_bin-1;
             long int M = y_n_bin;
             long int N = z_n_bin;
             
-            auto startcriti = std::chrono::steady_clock::now();
-            //Parallel version
-            // Get the default number of threads
-            int num_threads = 8;    //use tbb::info::default_concurrency(); to get all of them
-            //Types of Mutex: spin -> unfair, unscalable (better for locking things that require little time)
-            //queue ->> fair, scalable
-            //tbb::queuing_mutex myMutex;
-            tbb::spin_mutex myMutex;
-            // Run the default parallelism
-            tbb::task_arena arena(num_threads);
-            arena.execute([&]{
-                parallel_for(tbb::blocked_range<size_t>(0, indices.size(),indices.size()/num_threads),
-                    [&] (auto &range) {
-                    map<long int, int> paralmap;
-                    //cout << "Thread ID: " << this_thread::get_id() << endl;
-                    for(auto ihit=range.begin();ihit<range.end();++ihit)
-                    {
+            if(options["NR"]== "True" && energy>100){
+                
+                int WID = 20;
+                int nparts = 1 + x_hits_tr.size()/WID;
+                for(int part = 0; part < nparts; part++) {
+                    cout<<"   part "<<part<<"/"<<nparts<<"..."<<endl;
+                    int hit_tr_idx = part*WID;
+                    int hit_tr_idx_up = min((part+1)*WID,(int)x_hits_tr.size());
+                    S3D_x.clear();
+                    S3D_y.clear();
+                    S3D_z.clear();
+                    
+                    vector<double> x_hits_tr_i(&x_hits_tr[hit_tr_idx], &x_hits_tr[hit_tr_idx_up]);
+                    vector<double> y_hits_tr_i(&y_hits_tr[hit_tr_idx], &y_hits_tr[hit_tr_idx_up]);
+                    vector<double> z_hits_tr_i(&z_hits_tr[hit_tr_idx], &z_hits_tr[hit_tr_idx_up]);
+                    vector<double> energy_hits_i(&energy_hits[hit_tr_idx], &energy_hits[hit_tr_idx_up]);
+                    
+                    auto startsmear = std::chrono::steady_clock::now();
+                    cloud_smearing3D(x_hits_tr_i, y_hits_tr_i, z_hits_tr_i, energy_hits_i, options, S3D_x, S3D_y, S3D_z);
+                    auto endsmear = std::chrono::steady_clock::now();
+                    dur_smear=dur_smear+endsmear-startsmear;
+                    size_tot+=S3D_z.size();
+                    
+                    vector<size_t> indices(S3D_z.size());
+                    // Fill indices with 0, 1, 2, ..., numbers.size() - 1
+                    iota(indices.begin(), indices.end(), 0);
+                    
+                    auto startcriti = std::chrono::steady_clock::now();
+                    // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
+                    //Parallel version
+                    // Get the default number of threads
+                    int num_threads = 8;    //use tbb::info::default_concurrency(); to get all of them
+                    //Types of Mutex: spin -> unfair, unscalable (better for locking things that require little time)
+                    //queue ->> fair, scalable
+                    //tbb::queuing_mutex myMutex;
+                    tbb::spin_mutex myMutex;
+                    // Run the default parallelism
+                    tbb::task_arena arena(num_threads);
+                    arena.execute([&]{
+                        parallel_for(tbb::blocked_range<size_t>(0, indices.size(),indices.size()/num_threads),
+                            [&] (auto &range) {
+                            map<long int, int> paralmap;
+                            //cout << "Thread ID: " << this_thread::get_id() << endl;
+                            for(auto ihit=range.begin();ihit<range.end();++ihit)
+                            {
+                                long int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
+                                long int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
+                                long int zz = floor((S3D_z[ihit]- zmin)/ zbin_dim);
+                                long int map_index = xx * (M * N) + yy * N + zz;
+                                
+                                if (paralmap.find(map_index) == paralmap.end()) paralmap[map_index] = 1;
+                                else paralmap[map_index] += 1;
+                            }
+                            //cout<<"Mutex\n";
+                            //cout << "Thread ID: " << this_thread::get_id() << endl;
+                            //tbb::queuing_mutex::scoped_lock myLock(myMutex);
+                            tbb::spin_mutex::scoped_lock myLock(myMutex);	//maybe better to use oneapi::tbb::spin_mutex to use spi_mutex since the critical operation is small
+                            //merge of paralmap in hcmap
+                            hcmap.merge(paralmap);
+                            for(auto it=paralmap.begin();it!=paralmap.end();++it) hcmap[it->first] = hcmap[it->first] + paralmap[it->first];               //Here auto would be std:map<long int,int>::iterator
+                        });
+                    });
+                    
+                    //End parallel version
+
+                    //Sequencial version
+                    /*for_each(indices.begin(), indices.end(), [&](int ihit) {
                         long int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
                         long int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
                         long int zz = floor((S3D_z[ihit]- zmin)/ zbin_dim);
                         long int map_index = xx * (M * N) + yy * N + zz;
                         
-                        if (paralmap.find(map_index) == paralmap.end()) paralmap[map_index] = 1;
-                        else paralmap[map_index] += 1;
-                    }
-                    //cout<<"Mutex\n";
-                    //cout << "Thread ID: " << this_thread::get_id() << endl;
-                    //tbb::queuing_mutex::scoped_lock myLock(myMutex);
-                    tbb::spin_mutex::scoped_lock myLock(myMutex);	//maybe better to use oneapi::tbb::spin_mutex to use spi_mutex since the critical operation is small
-                    //merge of paralmap in hcmap
-                    hcmap.merge(paralmap);
-                    for(auto it=paralmap.begin();it!=paralmap.end();++it) hcmap[it->first] = hcmap[it->first] + paralmap[it->first];               //Here auto would be std:map<long int,int>::iterator
+                        if (hcmap.find(map_index) == hcmap.end()) hcmap[map_index] = 1;
+                        else hcmap[map_index] += 1;
+                        
+                    });*/
+                    //End sequencial version
+                    auto endcriti = std::chrono::steady_clock::now();
+                    dur_criti=dur_criti+endcriti-startcriti;
+                }
+                auto startampli = std::chrono::steady_clock::now();
+                for(auto const& [key, val] : hcmap) {
+                    int zz = key % N ;
+                    int yy = ((key - zz) / N) % M;
+                    int xx = (key - yy * N - zz) / N / M;
+                    hout[xx][yy]+=Nph_saturation(val, optA, optbeta);
+                }
+                auto endampli = std::chrono::steady_clock::now();
+                dur_ampli=dur_ampli+endampli-startampli;
+
+            } else {
+
+                auto startsmear = std::chrono::steady_clock::now();
+                cloud_smearing3D(x_hits_tr, y_hits_tr, z_hits_tr, energy_hits, options, S3D_x, S3D_y, S3D_z);
+                auto endsmear = std::chrono::steady_clock::now();
+                dur_smear=dur_smear+endsmear-startsmear;
+                size_tot+=S3D_z.size();
+
+                vector<size_t> indices(S3D_z.size());
+                // Fill indices with 0, 1, 2, ..., numbers.size() - 1
+                iota(indices.begin(), indices.end(), 0);
+                
+                auto startcriti = std::chrono::steady_clock::now();
+                //Parallel version
+                // Get the default number of threads
+                int num_threads = 8;    //use tbb::info::default_concurrency(); to get all of them
+                //Types of Mutex: spin -> unfair, unscalable (better for locking things that require little time)
+                //queue ->> fair, scalable
+                //tbb::queuing_mutex myMutex;
+                tbb::spin_mutex myMutex;
+                // Run the default parallelism
+                tbb::task_arena arena(num_threads);
+                arena.execute([&]{
+                    parallel_for(tbb::blocked_range<size_t>(0, indices.size(),indices.size()/num_threads),
+                        [&] (auto &range) {
+                        map<long int, int> paralmap;
+                        //cout << "Thread ID: " << this_thread::get_id() << endl;
+                        for(auto ihit=range.begin();ihit<range.end();++ihit)
+                        {
+                            long int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
+                            long int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
+                            long int zz = floor((S3D_z[ihit]- zmin)/ zbin_dim);
+                            long int map_index = xx * (M * N) + yy * N + zz;
+                            
+                            if (paralmap.find(map_index) == paralmap.end()) paralmap[map_index] = 1;
+                            else paralmap[map_index] += 1;
+                        }
+                        //cout<<"Mutex\n";
+                        //cout << "Thread ID: " << this_thread::get_id() << endl;
+                        //tbb::queuing_mutex::scoped_lock myLock(myMutex);
+                        tbb::spin_mutex::scoped_lock myLock(myMutex);	//maybe better to use oneapi::tbb::spin_mutex to use spi_mutex since the critical operation is small
+                        //merge of paralmap in hcmap
+                        hcmap.merge(paralmap);
+                        for(auto it=paralmap.begin();it!=paralmap.end();++it) hcmap[it->first] = hcmap[it->first] + paralmap[it->first];               //Here auto would be std:map<long int,int>::iterator
+                    });
                 });
-            });
-            
-            //End parallel version
-
-            //Sequencial version
-            /*for_each(indices.begin(), indices.end(), [&](int ihit) {
-                long int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
-                long int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
-                long int zz = floor((S3D_z[ihit]- zmin)/ zbin_dim);
-                long int map_index = xx * (M * N) + yy * N + zz;
                 
-                if (hcmap.find(map_index) == hcmap.end()) hcmap[map_index] = 1;
-                else hcmap[map_index] += 1;
-                
-            });*/
-            //End sequencial version
-            auto endcriti = std::chrono::steady_clock::now();
-            auto startampli = std::chrono::steady_clock::now();
+                //End parallel version
 
-            for(auto const& [key, val] : hcmap) {
-                int zz = key % N ;
-                int yy = ((key - zz) / N) % M;
-                int xx = (key - yy * N - zz) / N / M;
-                hout[xx][yy]+=Nph_saturation(val, optA, optbeta);
+                //Sequencial version
+                /*for_each(indices.begin(), indices.end(), [&](int ihit) {
+                    long int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
+                    long int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
+                    long int zz = floor((S3D_z[ihit]- zmin)/ zbin_dim);
+                    long int map_index = xx * (M * N) + yy * N + zz;
+                    
+                    if (hcmap.find(map_index) == hcmap.end()) hcmap[map_index] = 1;
+                    else hcmap[map_index] += 1;
+                    
+                });*/
+                //End sequencial version
+                auto endcriti = std::chrono::steady_clock::now();
+                dur_criti=dur_criti+endcriti-startcriti;
+
+                auto startampli = std::chrono::steady_clock::now();
+                for(auto const& [key, val] : hcmap) {
+                    int zz = key % N ;
+                    int yy = ((key - zz) / N) % M;
+                    int xx = (key - yy * N - zz) / N / M;
+                    hout[xx][yy]+=Nph_saturation(val, optA, optbeta);
+                }
+                auto endampli = std::chrono::steady_clock::now();
+                dur_ampli=dur_ampli+endampli-startampli;
+                
             }
-            auto endampli = std::chrono::steady_clock::now();
-            dur=stopindi-startindi;
-            std::cout << "Time indices " << dur.count() << " seconds" <<std::endl;
-            dur=endcriti-startcriti;
-            std::cout << "Time Critical " << dur.count() << " seconds" <<std::endl;
-            dur=endampli-startampli;
-            std::cout << "Time ampli " << dur.count() << " seconds" <<std::endl;
-            
+
         } else {
             double deltaZ=max(2*stod(options["z_vox_dim"]),
                               stod(options["z_vox_dim"]) * max_3Dhisto_volume /
@@ -1496,57 +1593,155 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         
             for(unsigned int i=0; i < split_vals.size()-1; i++) {
                 
-                // Vector to store all indices
-                vector<size_t> allindices(S3D_z.size());
-                // Fill indices with 0, 1, 2, ..., numbers.size() - 1
-                iota(allindices.begin(), allindices.end(), 0);
-                
-                // Getting the indices where split_vals[i] <= S3D_z < split_vals[i+1]
-                vector<size_t> indices;
-                copy_if(allindices.begin(), allindices.end(), back_inserter(indices), [&](size_t n) {
-                    return ( S3D_z[n] >= split_vals[i] && S3D_z[n] < split_vals[i+1]);
-                });
-                
-                if(indices.size()==0) continue;
-                
                 z_n_bin  = max(2.0, round_up_to_even((split_vals[i+1]-split_vals[i])/zbin_dim));
                 
                 vector<vector<vector<double>>> hc(x_n_bin+1,
                                                   vector<vector<double>>(y_n_bin+1,
                                                                          vector<double>(z_n_bin+1, 0.0)));
                 
-                
-                //cout<<"DEBUG "<<hc.size()<<","<<hc[0].size()<<","<<hc[0][0].size()<<endl<<flush;
-                cout<<"Amplifying voxel region z=["<<split_vals[i]<<","<<split_vals[i+1]<<"] "<<i<<"/"<<split_vals.size()-1-1<<endl;
-                
-                // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
-                for_each(indices.begin(), indices.end(), [&](int ihit) {
-                    int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
-                    int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
-                    int zz = floor((S3D_z[ihit]-split_vals[i])/ zbin_dim);
-                    hc[xx][yy][zz] += 1.;
-                });
-                
+                if(options["NR"]=="True" && energy>100) {
+                    
 
-                long int LL = (x_n_bin)*(y_n_bin)*(z_n_bin);
-                long int not_empty=0;
-                
-                // Applying GEM3 amplification
-                for(int xx = 0; xx<x_n_bin-1; xx++){
-                    for(int yy=0; yy<y_n_bin-1; yy++) {
-                        for(int zz=0; zz<z_n_bin-1; zz++){
-                            if(hc[xx][yy][zz] != 0.) {
-                                not_empty++;
-                                hout[xx][yy]+=Nph_saturation(hc[xx][yy][zz], optA, optbeta);
+                    int WID = 20;
+                    int nparts = 1 + x_hits_tr.size()/WID;
+                    
+                    //cout<<"DEBUG "<<hc.size()<<","<<hc[0].size()<<","<<hc[0][0].size()<<endl<<flush;
+                    cout<<"Amplifying voxel region z=["<<split_vals[i]<<","<<split_vals[i+1]<<"] "<<i<<"/"<<split_vals.size()-1-1<<endl;
+                    
+                    for(int part = 0; part < nparts; part++) {
+                        cout<<"   part "<<part<<"/"<<nparts<<"..."<<endl;
+                        int hit_tr_idx = part*WID;
+                        int hit_tr_idx_up = min((part+1)*WID,(int)x_hits_tr.size());
+                        S3D_x.clear();
+                        S3D_y.clear();
+                        S3D_z.clear();
+                    
+                        vector<double> x_hits_tr_i(&x_hits_tr[hit_tr_idx], &x_hits_tr[hit_tr_idx_up]);
+                        vector<double> y_hits_tr_i(&y_hits_tr[hit_tr_idx], &y_hits_tr[hit_tr_idx_up]);
+                        vector<double> z_hits_tr_i(&z_hits_tr[hit_tr_idx], &z_hits_tr[hit_tr_idx_up]);
+                        vector<double> energy_hits_i(&energy_hits[hit_tr_idx], &energy_hits[hit_tr_idx_up]);
+                        
+                        //cout<<"Smearing..."<<endl<<flush;
+                        auto startsmear = std::chrono::steady_clock::now();
+                        cloud_smearing3D(x_hits_tr_i, y_hits_tr_i, z_hits_tr_i, energy_hits_i, options, S3D_x, S3D_y, S3D_z);
+                        auto endsmear = std::chrono::steady_clock::now();
+                        dur_smear=dur_smear+endsmear-startsmear;
+                        size_tot+=S3D_z.size();
+
+                        //cout<<"----- x "<<S3D_x.size()<<endl<<flush;
+                        //cout<<"----- y "<<S3D_y.size()<<endl<<flush;
+                        //cout<<"----- z "<<S3D_z.size()<<endl<<flush;
+                        
+                        //cout<<"Getting the vector to store all indices"<<endl<<flush;
+                        // Vector to store all indices
+                        vector<size_t> allindices(S3D_z.size());
+                        // Fill indices with 0, 1, 2, ..., numbers.size() - 1
+                        iota(allindices.begin(), allindices.end(), 0);
+                        
+                        auto startcriti = std::chrono::steady_clock::now();
+                        //cout<<"Getting the indices where split_vals[i] <= S3D_z < split_vals[i+1]"<<endl<<flush;
+                        // Getting the indices where split_vals[i] <= S3D_z < split_vals[i+1]
+                        vector<size_t> indices;
+                        copy_if(allindices.begin(), allindices.end(), back_inserter(indices), [&](size_t n) {
+                            return ( S3D_z[n] >= split_vals[i] && S3D_z[n] < split_vals[i+1]);
+                        });
+                        
+                        if(indices.size()==0) continue;
+                        
+                        // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
+                        for_each(indices.begin(), indices.end(), [&](int ihit) {
+                            int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
+                            int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
+                            int zz = floor((S3D_z[ihit]-split_vals[i])/ zbin_dim);
+                            hc[xx][yy][zz] += 1.;
+                        });
+                        auto endcriti = std::chrono::steady_clock::now();
+                        dur_criti=dur_criti+endcriti-startcriti;
+
+                    }
+
+                    long int LL = (x_n_bin)*(y_n_bin)*(z_n_bin);
+                    long int not_empty=0;
+                    auto startampli = std::chrono::steady_clock::now();
+                    
+                    // Applying GEM3 amplification
+                    for(int xx = 0; xx<x_n_bin-1; xx++){
+                        for(int yy=0; yy<y_n_bin-1; yy++) {
+                            for(int zz=0; zz<z_n_bin-1; zz++){
+                                if(hc[xx][yy][zz] != 0.) {
+                                    not_empty++;
+                                    hout[xx][yy]+=Nph_saturation(hc[xx][yy][zz], optA, optbeta);
+                                }
                             }
                         }
                     }
+                    auto endampli = std::chrono::steady_clock::now();
+                    dur_ampli=dur_ampli+endampli-startampli;
+                    cout<<"Sparse-ness of voxel region: "<< not_empty * 100./LL<<" %"<<endl;
+
+
+                } else {
+                    auto startsmear = std::chrono::steady_clock::now();
+                    cloud_smearing3D(x_hits_tr, y_hits_tr, z_hits_tr, energy_hits, options, S3D_x, S3D_y, S3D_z);
+                    auto endsmear = std::chrono::steady_clock::now();
+                    dur_smear=dur_smear+endsmear-startsmear;
+                    size_tot+=S3D_z.size();
+
+                    // Vector to store all indices
+                    vector<size_t> allindices(S3D_z.size());
+                    // Fill indices with 0, 1, 2, ..., numbers.size() - 1
+                    iota(allindices.begin(), allindices.end(), 0);
+                    
+                    auto startcriti = std::chrono::steady_clock::now(); 
+                    // Getting the indices where split_vals[i] <= S3D_z < split_vals[i+1]
+                    vector<size_t> indices;
+                    copy_if(allindices.begin(), allindices.end(), back_inserter(indices), [&](size_t n) {
+                        return ( S3D_z[n] >= split_vals[i] && S3D_z[n] < split_vals[i+1]);
+                    });
+                    
+                    if(indices.size()==0) continue;
+                    
+                    //cout<<"DEBUG "<<hc.size()<<","<<hc[0].size()<<","<<hc[0][0].size()<<endl<<flush;
+                    cout<<"Amplifying voxel region z=["<<split_vals[i]<<","<<split_vals[i+1]<<"] "<<i<<"/"<<split_vals.size()-1-1<<endl;
+                    
+                    // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
+                    for_each(indices.begin(), indices.end(), [&](int ihit) {
+                        int xx = floor((S3D_x[ihit]- xmin)/ xbin_dim);
+                        int yy = floor((S3D_y[ihit]- ymin)/ ybin_dim);
+                        int zz = floor((S3D_z[ihit]-split_vals[i])/ zbin_dim);
+                        hc[xx][yy][zz] += 1.;
+                    });
+                    auto endcriti = std::chrono::steady_clock::now();
+                    dur_criti=dur_criti+endcriti-startcriti;
+                    
+
+                    long int LL = (x_n_bin)*(y_n_bin)*(z_n_bin);
+                    long int not_empty=0;
+                    
+                    auto startampli = std::chrono::steady_clock::now();
+                    // Applying GEM3 amplification
+                    for(int xx = 0; xx<x_n_bin-1; xx++){
+                        for(int yy=0; yy<y_n_bin-1; yy++) {
+                            for(int zz=0; zz<z_n_bin-1; zz++){
+                                if(hc[xx][yy][zz] != 0.) {
+                                    not_empty++;
+                                    hout[xx][yy]+=Nph_saturation(hc[xx][yy][zz], optA, optbeta);
+                                }
+                            }
+                        }
+                    }
+                    auto endampli = std::chrono::steady_clock::now();
+                    dur_ampli=dur_ampli+endampli-startampli;
+                    cout<<"Sparse-ness of voxel region: "<< not_empty * 100./LL<<" %"<<endl;
                 }
-                
-                cout<<"Sparse-ness of voxel region: "<< not_empty * 100./LL<<" %"<<endl;
             }
             
         }
+
+        cout<<"size = "<<size_tot<<endl;
+        std::cout << "Time smear " << dur_smear.count() << " seconds" <<std::endl;
+        std::cout << "Time Critical " << dur_criti.count() << " seconds" <<std::endl;
+        std::cout << "Time ampli " << dur_ampli.count() << " seconds" <<std::endl;
         
         // Applying camera response + Poisson smearing
         for_each(hout.begin(), hout.end(),[&](std::vector<int>& v)  {
@@ -1740,18 +1935,10 @@ vector<float> smear(const vector<double>& axis_hit, const vector<double>& axis_s
     
     // Fill X with Gaussian-distributed values based on axis_hit and axis_sigma
     //This here is the slowest part
-    auto startstep4 = std::chrono::steady_clock::now();
-    
     transform(indices.begin(), indices.end(), back_inserter(X), [&](int i) {
         return (float)gRandom->Gaus(axis_hit[i], axis_sigma[i]);
     });
     
-    auto endstep4 = std::chrono::steady_clock::now();
-    cout<<X.size()<<endl;
-
-    std::chrono::duration<double> dur=endstep4-startstep4;
-    std::cout << "Slowest Time smear part " << dur.count() << " seconds" <<std::endl;
-
     return X;
 }
 
@@ -1812,12 +1999,12 @@ void smear_parallel(const vector<double>& x_axis_hit,const vector<double>& y_axi
     });    
 
     auto endstep4 = std::chrono::steady_clock::now();
-    cout<<X.size()<<endl;
-    cout<<Y.size()<<endl;
-    cout<<Z.size()<<endl;
+    //cout<<X.size()<<endl;
+    //cout<<Y.size()<<endl;
+    //cout<<Z.size()<<endl;
 
-    std::chrono::duration<double> dur=endstep4-startstep4;
-    std::cout << "Slowest Time smear part " << dur.count() << " seconds" <<std::endl;
+    //std::chrono::duration<double> dur=endstep4-startstep4;
+    //std::cout << "Slowest Time smear part " << dur.count() << " seconds" <<std::endl;
 
 
     return ;
