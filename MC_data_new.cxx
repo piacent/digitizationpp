@@ -1394,8 +1394,8 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         
         // If voxel regions <= 2 -> use the standard algorithm, otherwise use the map algorithm
         bool map_algorithm = true;
-        if( x_n_bin * y_n_bin * z_n_bin_MAX < 2*max_3Dhisto_volume) map_algorithm = false;
-        //map_algorithm = true;       //CAREEEEE...TEST
+        if(energy/(x_n_bin * y_n_bin * z_n_bin_MAX)>1e-6) map_algorithm = false;
+
         long int z_n_bin;
         if (map_algorithm) z_n_bin = z_n_bin_MAX;
         
