@@ -22,11 +22,11 @@ In the file you use to call the source of thisroot.sh (your setup file or .bashr
 `export CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH:$OPENCVSYS`
 
 ### Install TBB
-One can install following the procedure explained in (here)[https://github.com/oneapi-src/oneTBB/blob/master/INSTALL.md].
+One can install following the procedure explained in [here](https://github.com/oneapi-src/oneTBB/blob/master/INSTALL.md).
 
 Alternatively, one can download the release desired (tested with 2021.12.0, but 2021.13.0 now available):
 `wget https://github.com/oneapi-src/oneTBB/releases/download/v2021.12.0/oneapi-tbb-2021.12.0-lin.tgz`
-or by directly downloading the precompiled oneapi-tbb version from {Release}[https://github.com/oneapi-src/oneTBB/releases].
+or by directly downloading the precompiled oneapi-tbb version from [Release](https://github.com/oneapi-src/oneTBB/releases).
 Then untar:
 `tar zxf oneapi-tbb-2021.10.0-lin.tgz`
 
