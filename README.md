@@ -35,7 +35,7 @@ Then untar:
 
 It is highly recommended to add to the environment the following variable:
 
-`export TBBROOT=<path_to_tbb_folder>`
+`export TBBROOT="<path_to_tbb_folder>"`
 
 In order to enable oneapi TBB the user needs to source it:
 
