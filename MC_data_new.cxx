@@ -273,7 +273,7 @@ int main(int argc, char** argv)
             }
             
             // standard: name of output file = histograms_RunRRRRR.root (R run number)
-            string fileoutname= Form("%s/histogram_Runs%07d.root",
+            string fileoutname= Form("%s/histograms_Run%05d.root",
                                      fnameoutfolder.c_str(),
                                      run_count);
             
