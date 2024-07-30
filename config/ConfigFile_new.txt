@@ -55,9 +55,9 @@
 'readout_time'          : 184.4,     # readout time of the camera in ms (184.4ms for ultra quiet scan)
 
 'bckg'                  : True,      # if 'True' background is added
-'NR'                    : False,     # 'True' for NR digitization, 'False' for ER
-'SRIM'                  : True,      # 'True' for SRIM NR simulations
-'NR_list'               : 'NRlist_AmBeISO_LIME_neutrons_50cmPE_10cmCu_NOPb_10umStep', # Name of the SRIM MC NR_list file   
+'NR'                    : False,     # 'True' for NR and ER digitization, 'False' for only ER
+'SRIM'                  : False,      # 'True' for SRIM NR simulations
+'NR_list'               : , #'NRlist_AmBeISO_LIME_neutrons_50cmPE_10cmCu_NOPb_10umStep', # Name of the SRIM MC NR_list file   
 'GEANT4isotopes'        : False,      # specify if you are digitizing tracks from radioactive isotope GEANT4 simulations
 'rootfiles'             : True,      # choose input type: True for G4 root iput, False for SRIM txt files
 'events'                : -1,         # number of events to be processed, -1 = all
