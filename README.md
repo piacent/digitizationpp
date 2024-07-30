@@ -31,7 +31,7 @@ or by directly downloading the precompiled oneapi-tbb version from [Release](htt
 
 Then untar:
 
-`tar zxf oneapi-tbb-2021.10.0-lin.tgz`
+`tar zxf oneapi-tbb-2021.12.0-lin.tgz`
 
 It is highly recommended to add to the environment the following variable:
 
