@@ -76,6 +76,7 @@ If not existing, the Outdir will be created. The -I and -O options can be droppp
 `<path_to_digitizationpp-dir>/input/`
 and the outdir will be created in 
 `<path_to_digitizationpp-dir>/OutDir/`
+Depending on the system, the outdir folder creation may fail. In that case create the output directory.
 
 # Example
 From `<path_to_digitizationpp-dir>`
