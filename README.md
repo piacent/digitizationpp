@@ -75,7 +75,7 @@ Move to a desired folder where to launch the code
 If not existing, the Outdir will be created. The -I and -O options can be droppped and the code will search inputfiles in
 `<path_to_digitizationpp-dir>/input/`
 and the outdir will be created in 
-`<path_to_digitizationpp-dir>/OutDir/` < \br>
+`<path_to_digitizationpp-dir>/OutDir/` <\br>
 Depending on the system, the outdir folder creation may fail. In that case create the output directory.
 
 # Example
