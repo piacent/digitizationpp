@@ -62,3 +62,7 @@ target_link_libraries(cygnolib PUBLIC rootana z)
 
 add_executable(digitazionpp "${PROJECT_SOURCE_DIR}/MC_data_new.cxx")
 target_link_libraries(digitazionpp PUBLIC ${ROOT_LIBRARIES} ${OpenCV_LIBS} s3 curl rootana cygnolib z opencv_imgcodecs opencv_core tbb)
+
+add_executable(joinPeds "${PROJECT_SOURCE_DIR}/joinPeds.cxx")
+target_link_libraries(joinPeds PUBLIC ${ROOT_LIBRARIES} ${OpenCV_LIBS} s3 curl rootana cygnolib z opencv_imgcodecs opencv_core)
+

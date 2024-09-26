@@ -13,6 +13,7 @@
 #include "TMidasEvent.h"
 #include <zlib.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <chrono>
 #include <string>
 #include <fstream>
@@ -24,10 +25,13 @@
 #include <cmath>
 #include <stdexcept>
 #include <opencv2/imgcodecs.hpp>
+#include <filesystem>
 #include <list>
+#include "TFile.h"
+#include "TH2.h"
 #include <cstdlib>
 #include <numeric>
-
+#include "s3.h"
 
 namespace cygnolib {
     
@@ -570,4 +574,84 @@ namespace cygnolib {
         return PMTD;
     }
     
+}
+
+
+void cygnolib::joinMidasPedestals(std::vector<int> &pedruns, std::string ped_cloud_dir, std::string tmpfolder, std::string outfilename) {
+
+    std::string tmpname   = tmpfolder+outfilename;
+
+
+    if(! std::filesystem::exists(tmpname)) {
+        auto outfile = std::shared_ptr<TFile> {TFile::Open((tmpname).c_str(),
+                                                           "RECREATE") };
+
+        int counterpic = 0;
+        for(unsigned int k = 0; k<pedruns.size(); k++) {
+
+            int run = pedruns[k];
+
+            std::string tmpnamemid = Form( "%s/run%05d.mid.gz", tmpfolder.c_str(), run);
+
+            std::cout << "Looking for file: "<<tmpnamemid<<std::endl;
+            bool verbose = false;
+            bool cloud   = true;
+
+
+            //Download or find midas file
+            std::string filename = s3::cache_file(s3::mid_file(run, ped_cloud_dir, cloud, verbose),
+                                                  tmpfolder,
+                                                  cloud,
+                                                  ped_cloud_dir,
+                                                  verbose);
+
+            std::cout<<"Converting MIDAS file into root file..."<<std::endl;
+            //reading data from midas file
+            std::cout<<"Opening midas file "<<tmpnamemid<<" ..."<<std::endl;
+            TMReaderInterface* reader = cygnolib::OpenMidasFile(tmpnamemid);
+            bool reading = true;
+
+            int progresscounter = 0;
+
+            while (reading) {
+
+                TMidasEvent event = TMidasEvent();
+                reading = TMReadEvent(reader, &event);
+                if (!reading) {
+                    // DEBUG
+                    // std::cout<<"EOF reached."<<std::endl;
+                    break;
+                }
+
+
+                bool cam_found = cygnolib::FindBankByName(event, "CAM0");
+                if(cam_found) {
+                    std::cout<<"Processing image "<<progresscounter<<"...\r"<<std::flush;
+                    progresscounter++;
+
+                    cygnolib::Picture pic=cygnolib::daq_cam2pic(event, "fusion");
+                    std::vector<std::vector<uint16_t>> vecpic = pic.GetFrame();
+
+                    TH2I bkg_image(Form("pic_%d", counterpic), "",
+                                   (int)vecpic[0].size(), -0.5, (int)vecpic[0].size() -0.5,
+                                   (int)vecpic.size(),    -0.5, (int)vecpic.size()    -0.5);
+
+                    for(unsigned int i = 0; i<vecpic.size(); i++) {
+                        for (unsigned int j =0; j<vecpic[0].size(); j++) {
+                            bkg_image.SetBinContent(j, i, vecpic[i][j]);
+                        }
+                    }
+                    bkg_image.Write();
+                    counterpic++;
+                }
+            }
+        }
+
+        outfile->Close();
+        std::cout<<"File "<<tmpname<<" successfully created."<<std::endl;
+    } else {
+        std::cout<<"File "<<tmpname<<" already exists!"<<std::endl;
+    }
+    return;
+
 }
