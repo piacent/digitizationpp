@@ -47,6 +47,8 @@ target_include_directories(s3 PUBLIC
                           "${PROJECT_BINARY_DIR}"
                           "${PROJECT_SOURCE_DIR}/include"
                           )
+                                                    
+target_link_libraries(s3 PUBLIC curl)
                           
 # -------- cygnolib --------
 add_library(cygnolib
@@ -57,7 +59,7 @@ target_include_directories(cygnolib PUBLIC
                           ${PROJECT_SOURCE_DIR}/include
                           $ENV{ROOTANASYS}/include
                           )
-target_link_libraries(cygnolib PUBLIC rootana z)
+target_link_libraries(cygnolib PUBLIC ${ROOT_LIBRARIES} rootana z s3)
 
 
 add_executable(digitazionpp "${PROJECT_SOURCE_DIR}/MC_data_new.cxx")
