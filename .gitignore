@@ -40,3 +40,5 @@ doc/html
 doc/latex
 build
 .vscode
+input/old
+.ipynb_checkpoints
