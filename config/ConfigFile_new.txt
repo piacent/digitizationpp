@@ -24,9 +24,11 @@
 'z_offset'              : -240.,     # z offset (along drift direction - corresponds to coordinate of the farthest point from the GEM)
 'z_gem'                 : 240.,        # GEM z coordinate [mm] (drift distance will be (position in simulation along drift)+(z_offset)-(z_gem) )
 'tag'			: 'Data',    # Set 'Data' to download a real pedestal run 
-'noiserun'              : 58695,      # pedestal run to add as background
+'noiserun'              : '58695;58702',      # pedestal runs to add as background separated by ';'
 'ped_cloud_dir'         : 'LNGS',    # directory inside the cloud bucket where the pedestal run is located
 'bckg_path'		: '../tmp/', # set path to pedestal run, or leave it black if you want to download it
+'bckg_name'     : 'mypeds.root', # set name of the .root file containing the pedestals
+'random_ped'            : -1, # if -1 then the pedestal is randomly extracted from the 'bckg_name' file, else put here which fixed event of the 'bckg_name' file you want to use
 'ped_rand'		: True,      # if true, will extract randomly a picture from the background root file (used for run2 MC comparison)
 'start_event'		: 0,         # index of the first event to digitize
 
@@ -55,7 +57,7 @@
 'readout_time'          : 184.4,     # readout time of the camera in ms (184.4ms for ultra quiet scan)
 
 'bckg'                  : True,      # if 'True' background is added
-'NR'                    : True,     # 'True' for NR digitization, 'False' for ER
+'NR'                    : False,     # 'True' for NR digitization, 'False' for ER
 'SRIM'                  : False,      # 'True' for SRIM NR simulations
 'NR_list'               : '', # Name of the SRIM MC NR_list file
 'GEANT4isotopes'        : False,      # specify if you are digitizing tracks from radioactive isotope GEANT4 simulations

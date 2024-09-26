@@ -1146,7 +1146,8 @@ void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile)
         
         if(key!="tag"       && key !="Vig_Map" &&
            key!="bckg_path" && key !="ped_cloud_dir" &&
-           key!="NR_list"
+           key!="NR_list"   && key !="noiserun" &&
+           key!="bckg_name"
            )
         {
             TH1F h(string(key).c_str(),"",1,0,1);
@@ -1166,89 +1167,58 @@ void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile)
 
 void AddBckg(map<string,string>& options, vector<vector<int>>& background) {
     
-    string tmpfolder = options["bckg_path"];
-    
-    if(! filesystem::exists(tmpfolder)){
-        //DEBUG
-        cout<<"Creating tmpfolder..."<<
-        system(("mkdir " + tmpfolder).c_str() );
-    }
-    
-    
     if(options["bckg"]=="True") {
         
-        string tmpname = Form( "%s/run%05d.mid.gz", tmpfolder.c_str(), stoi(options["noiserun"]));
+        string tmpfolder = options["bckg_path"];
+        string tmpname   = options["bckg_name"];
         
-        
-        if(! filesystem::exists(tmpname)) {
-            // DEBUG
-            cout << "Looking for file: "<<tmpname<<endl;
-            bool verbose = false;
-            bool cloud   = true;
-            
-            int run = stoi(options["noiserun"]);
-            
-            //Download or find midas file
-            string filename = s3::cache_file(s3::mid_file(run, options["ped_cloud_dir"], cloud, verbose),
-                                             options["bckg_path"],
-                                             cloud,
-                                             options["ped_cloud_dir"],
-                                             verbose);
+        if(! filesystem::exists(tmpfolder)){
+            //DEBUG
+            cout<<"Creating tmpfolder..."<<
+            system(("mkdir " + tmpfolder).c_str() );
         }
         
-        int pic_index = gRandom->Integer(100);
-        // DEBUG
-        pic_index = 0;
-        
-        // DEBUG
-        cout<<"Using pic # "<<pic_index<<" as a pedestal..."<<endl;
-        
-        //reading data from midas file
-        cout<<"Opening midas file "<<tmpname<<" ..."<<endl;
-        TMReaderInterface* reader = cygnolib::OpenMidasFile(tmpname);
-        bool reading = true;
-        
-        int counter = 0;
-        bool found = false;
-        while (reading) {
+        if(! filesystem::exists(tmpfolder+tmpname)) {
             
-            TMidasEvent event = TMidasEvent();
-            reading = TMReadEvent(reader, &event);
-            if (!reading) {
-                // DEBUG
-                // std::cout<<"EOF reached."<<std::endl;
-                break;
+            vector<int> pedruns;
+            
+            stringstream ssruns(options["noiserun"]);
+            string run;
+            vector<string> seglist;
+            while(getline(ssruns, run, ';')) {
+                int runi = stoi(run);
+                pedruns.push_back(runi);
             }
             
-            bool cam_found = cygnolib::FindBankByName(event, "CAM0");
-            if(cam_found) {
-                if(counter == pic_index) {
-                    cygnolib::Picture pic=cygnolib::daq_cam2pic(event, "fusion");
-                    
-                    //TH2I rootpic(Form("pic_run%d_ev%d", run_count, entry), "" , x_pix, -0.5, x_pix-0.5, y_pix, -0.5, y_pix-0.5);
-                    
-                    vector<vector<uint16_t>> vecpic = pic.GetFrame();
-                    for(unsigned int i = 0; i<vecpic.size(); i++) {
-                        for (unsigned int j =0; j<vecpic[0].size(); j++) {
-                            //rootpic.SetBinContent(j, i, vecpic[i][j]);
-                            background[i][j] = vecpic[i][j];
-                        }
-                    }
-                    //background=rootpic;
-                    
-                    found = true;
-                    break;
-                }
-                
-                counter++;
-            }
+            cygnolib::joinMidasPedestals(pedruns, options["ped_cloud_dir"], tmpfolder, tmpname);
             
         }
-        if(!found) {
-            cerr<<"AddBckg: Error: Cannot find pic # "<<pic_index<<" in pedestal run."<<endl;
-            exit(EXIT_FAILURE);
+        
+        
+        //throw runtime_error("DEBUG");
+        
+        auto fin = unique_ptr<TFile> {TFile::Open((tmpfolder+tmpname).c_str())};
+        
+        // Computing number of images in root file
+        int flength = 0;
+        for (auto&& keyAsObj : *(fin->GetListOfKeys())){
+            if(false) cout<<keyAsObj<<endl; //just to avoid a warning in the compilation
+            flength++;
         }
         
+        int pic_index = 0;
+        if(stoi(options["random_ped"])==-1) pic_index = gRandom->Integer(flength);
+        else pic_index =stoi(options["random_ped"]);
+        
+        cout<<"Using pic # "<<pic_index<<" out of "<<flength<<" as a pedestal..."<<endl;
+        TH2I* pic = fin->Get<TH2I>(Form("pic_%d", pic_index));
+        
+        for(int i = 0; i<pic->GetNbinsX()-1; i++) {
+            for (int j =0; j<pic->GetNbinsY()-1; j++) {
+                background[i][j] = pic->GetBinContent(j, i);
+            }
+        }
+        //throw runtime_error("DEBUG");
     }
     
     return;

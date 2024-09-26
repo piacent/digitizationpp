@@ -338,6 +338,17 @@ namespace cygnolib {
      *
      */
     PMTData daq_dig2PMTData(TMidasEvent &event, DGHeader *DGH);
+
+    /**
+     * @brief This function joins the pedestals into a unique .root file
+     *
+     * @param[in] pedruns vector containing the pedruns to merge
+     * @param[in] ped_cloud_dir directory inside the cloud bucket where the pedestal run is located
+     * @param[in] tmpfolder temporary folder where the pedestal file will be downloaded and the .root file located
+     * @param[in] outfilename name of the output .root file
+     *
+     */
+    void joinMidasPedestals(std::vector<int> &pedruns, std::string ped_cloud_dir, std::string tmpfolder, std::string outfilename);
     
     
 }
