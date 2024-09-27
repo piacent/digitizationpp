@@ -38,6 +38,8 @@ target_include_directories(s3 PUBLIC
                           "${PROJECT_SOURCE_DIR}/include"
                           )
                           
+target_link_libraries(s3 PUBLIC curl)
+
 # -------- cygnolib --------
 add_library(cygnolib
            ${PROJECT_SOURCE_DIR}/src/cygnolib.cxx
@@ -47,7 +49,8 @@ target_include_directories(cygnolib PUBLIC
                           ${PROJECT_SOURCE_DIR}/include
                           $ENV{ROOTANASYS}/include
                           )
-target_link_libraries(cygnolib PUBLIC rootana z s3 opencv_imgcodecs opencv_core)
+target_link_libraries(cygnolib PUBLIC ${ROOT_LIBRARIES} rootana z s3)
+# target_link_libraries(cygnolib PUBLIC rootana z s3 opencv_imgcodecs opencv_core)
 
 
 add_executable(digitazionpp "${PROJECT_SOURCE_DIR}/MC_data_new.cxx")
