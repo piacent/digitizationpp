@@ -38,3 +38,7 @@ OutDir
 tmp
 doc/html
 doc/latex
+.ipynb_checkpoints
+.vscode
+build
+input/old
