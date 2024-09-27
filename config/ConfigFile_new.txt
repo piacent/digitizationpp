@@ -69,5 +69,5 @@
 'absorption_l'          : 1400.,     # absorption lenght in [mm]
 
 'Vignetting'		: True,      #Add vignetting effect according to the MAP
-'Vig_Map'		: 'vignette_run04117.root',
+'Vig_Map'		: 'vignette_runs03930to03932.root',
 }
