@@ -197,7 +197,7 @@ int main(int argc, char** argv)
     if(! filesystem::exists(outfolder)){
         //DEBUG
         cout<<"Creating oufolder..."<<
-        system(("mkdir -p" + outfolder).c_str() );
+        system(("mkdir -p " + outfolder).c_str() );
     }
     
     map<string, string> dict_isotopes;
@@ -269,7 +269,7 @@ int main(int argc, char** argv)
             string basefilename   = filename_tmp.substr(0, delimFN);
             string fnameoutfolder = outfolder + "/" + basefilename;
             if(! filesystem::exists(fnameoutfolder)){
-                system(("mkdir " + fnameoutfolder).c_str() );
+                system(("mkdir -p " + fnameoutfolder).c_str() );
             }
             
             // standard: name of output file = histograms_RunRRRRR.root (R run number)
