@@ -1174,6 +1174,7 @@ void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile)
         
         if(key!="tag"       && key !="Vig_Map" &&
            key!="bckg_path" && key !="ped_cloud_dir" &&
+           key!="noiserun"  && key !="bckg_name" &&
            key!="NR_list"
            )
         {
