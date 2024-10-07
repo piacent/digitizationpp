@@ -1189,6 +1189,32 @@ void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile)
             h.Write();
         }
     }
+    
+    if(options["bckg"]=="True") {
+        std::vector<int> pedruns;
+        
+        stringstream ssruns(options["noiserun"]);
+        string run;
+        vector<string> seglist;
+        while(getline(ssruns, run, ';')) {
+            int runi = stoi(run);
+            pedruns.push_back(runi);
+        }
+        
+        int npeds = (int)pedruns.size();
+        TH1F h("pedestal_runs","",npeds,0,npeds);
+        for (int i = 0; i < npeds; i++) {
+            h.SetBinContent(i+1, pedruns[i]);
+        }
+        h.Write();
+        
+    } else {
+        TH1F h("pedestal_runs","",1,0,1);
+        h.SetBinContent(1, -1);
+        h.Write();
+    }
+    
+    
     outfile->cd();
     return;
 }
