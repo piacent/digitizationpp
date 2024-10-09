@@ -64,6 +64,7 @@
 'events'                : -1,         # number of events to be processed, -1 = all
 'donotremove'           : True,      # Remove or not the file from the tmp folder
 'fixed_seed'            : False,     # If 'True' the seed of random distributions is set to 0 (for debugging purposes)
+'WID'                   : 5,         # Integer parameter: the smaller WID is, the smaller the ram usage but the higher the time consumption
 
 'randZ_range'           : 0.,        # Track z coordinate range [mm]. Tracks will be generated uniformly between 'z_hit+randZ_range/2' and 'z_hit-randZ_range/2'
 'absorption_l'          : 1400.,     # absorption lenght in [mm]
