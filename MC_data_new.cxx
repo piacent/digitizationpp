@@ -1419,9 +1419,9 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
             long int M = y_n_bin;
             long int N = z_n_bin;
             
-            if(NR_flag==true && energy>100){
+            if((NR_flag==true && energy>100)||(NR_flag==false && energy>500)) {
                 
-                int WID = 20;
+                int WID = stoi(options["WID"]);
                 int nparts = 1 + x_hits_tr.size()/WID;
                 for(int part = 0; part < nparts; part++) {
                     cout<<"   part "<<part<<"/"<<nparts<<"..."<<endl;
@@ -1605,10 +1605,10 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                                                   vector<vector<double>>(y_n_bin+1,
                                                                          vector<double>(z_n_bin+1, 0.0)));
                 
-                if(NR_flag==true && energy>100) {
+                if((NR_flag==true && energy>100)||(NR_flag==false && energy>500)) {
                     
 
-                    int WID = 20;
+                    int WID = stoi(options["WID"]);
                     int nparts = 1 + x_hits_tr.size()/WID;
                     
                     //cout<<"DEBUG "<<hc.size()<<","<<hc[0].size()<<","<<hc[0][0].size()<<endl<<flush;
