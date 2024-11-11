@@ -333,7 +333,7 @@ int main(int argc, char** argv)
             
             auto outfile = shared_ptr<TFile> {TFile::Open(fileoutname.c_str(),
                                                           "RECREATE") };
-            outfile->mkdir("event_info");
+            //outfile->mkdir("event_info");
             SaveValues(options,outfile);
             
             //Output file branches
@@ -986,7 +986,7 @@ int main(int argc, char** argv)
                 final_image.Write();
                 
             }
-            outfile->cd("event_info");
+            //outfile->cd("event_info");
             outtree->Write();
             
             cout<<Form("COMPLETED RUN %d",run_count)<<endl;
