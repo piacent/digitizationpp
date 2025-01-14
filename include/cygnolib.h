@@ -315,7 +315,7 @@ namespace cygnolib {
      * @return the image as a Picture object
      *
      */
-    Picture  daq_cam2pic(TMidasEvent &event, std::string cam_model = "fusion");
+    Picture  daq_cam2pic(TMidasEvent &event);
     
     /**
      * @brief This function extracts the digitizer header from the MIDAS event and
