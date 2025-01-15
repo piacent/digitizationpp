@@ -24,14 +24,14 @@
 'randZ_range'           : 0.,        # Track z coordinate range [mm]. Tracks will be generated uniformly between 'z_hit+randZ_range/2' and 'z_hit-randZ_range/2'
 
 # Camera parameters
-'x_pix'			: 2304,      # number of pixels in the first dimension
+'x_pix'			: 2304,      # number of pixels in the first dimension (2304 Fusion, 4096 Quest1 and Quest2)
 'y_pix'			: 2304,      # number of pixels in the second dimension
-'counts_per_photon'     : 2.,        # sensor conversion factor counts/photons
-'sensor_size'           : 14.976,    # sensor dimension [mm] ORCA Fusion
+'counts_per_photon'     : 2.,        # sensor conversion factor counts/photons (2. Fusion, 4.49 Quest1 and Quest2.. Given by similar QE and a factor 2.245 Quest camera have in e-/count)
+'y_sensor_size'         : 14.976,    # sensor dimension [mm] ORCA Fusion (14.976 mm Fusion, 10.598 Quest1 and Quest2)
 'camera_aperture'       : 0.95,
 'exposure_time_effect'  : False,      # if True simulates the effect of tracks cut by the sensor being not fully exposed
 'exposure_time'         : 300,       # exposure time in milliseconds
-'readout_time'          : 184.4,     # readout time of the camera in ms (184.4ms for ultra quiet scan)
+'readout_time'          : 184.4,     # readout time of the camera in ms (184.4ms Fusion ultra quiet scan (UQS), 199 ms Quest1 UQS, 39 ms Quest2 UQS)
 
 
 # Saturation parameters
