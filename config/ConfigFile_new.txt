@@ -24,15 +24,10 @@
 'randZ_range'           : 0.,        # Track z coordinate range [mm]. Tracks will be generated uniformly between 'z_hit+randZ_range/2' and 'z_hit-randZ_range/2'
 
 # Camera parameters
-'x_pix'			: 2304,      # number of pixels in the first dimension (2304 Fusion, 4096 Quest1 and Quest2)
-'y_pix'			: 2304,      # number of pixels in the second dimension
-'counts_per_photon'     : 2.,        # sensor conversion factor counts/photons (2. Fusion, 4.49 Quest1 and Quest2.. Given by similar QE and a factor 2.245 Quest camera have in e-/count)
-'y_sensor_size'         : 14.976,    # sensor dimension [mm] ORCA Fusion (14.976 mm Fusion, 10.598 Quest1 and Quest2)
+'Camera_type'		: 'Quest1',   # Possibilities: Fusion, Quest1, Quest2
 'camera_aperture'       : 0.95,
 'exposure_time_effect'  : False,      # if True simulates the effect of tracks cut by the sensor being not fully exposed
 'exposure_time'         : 300,       # exposure time in milliseconds
-'readout_time'          : 184.4,     # readout time of the camera in ms (184.4ms Fusion ultra quiet scan (UQS), 199 ms Quest1 UQS, 39 ms Quest2 UQS)
-
 
 # Saturation parameters
 'saturation'            : True,      # if 'True' saturation effect is applied on GEM3    
@@ -54,7 +49,7 @@
 'noiserun'              : '58695;58702',      # pedestal runs to add as background separated by ';'
 'ped_cloud_dir'         : 'LNGS',    # directory inside the cloud bucket where the pedestal run is located
 'bckg_path'		: '../tmp/', # set path to pedestal run, or leave it black if you want to download it
-'bckg_name'     	: 'mypeds.root', # set name of the .root file containing the pedestals
+'bckg_name'     	: 'mypedsQ.root', # set name of the .root file containing the pedestals
 'random_ped'            : -1, # if -1 then the pedestal is randomly extracted from the 'bckg_name' file, else put here which fixed event of the 'bckg_name' file you want to use
 'start_event'		: 0,         # index of the first event to digitize
 
@@ -70,7 +65,7 @@
 'rootfiles'             : True,      # choose input type: True for G4 root iput, False for SRIM txt files
 'events'                : -1,         # number of events to be processed, -1 = all
 'donotremove'           : True,      # Remove or not the file from the tmp folder
-'fixed_seed'            : False,     # If 'True' the seed of random distributions is set to 0 (for debugging purposes)
+'fixed_seed'            : False,     # If 'True' the seed of random distributions is set to 10 (for debugging purposes)
 'WID'                   : 5,         # Integer parameter: the smaller WID is, the smaller the ram usage but the higher the time consumption
 
 }
