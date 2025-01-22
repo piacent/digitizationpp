@@ -33,9 +33,9 @@
 
 
 'ion_pot'               : 0.0350,    # ionization potential for He/CF4 60/40 [keV]
-'GEM1_HV'               : 420.,      # HV of GEM1
-'GEM2_HV'               : 420.,      # HV of GEM2
-'GEM3_HV'               : 420.,      # HV of GEM3
+'GEM1_HV'               : 440.,      # HV of GEM1
+'GEM2_HV'               : 440.,      # HV of GEM2
+'GEM3_HV'               : 440.,      # HV of GEM3
 
 
 # saturation parameters
@@ -54,8 +54,8 @@
 'exposure_time'         : 300,       # exposure time in milliseconds
 'readout_time'          : 184.4,     # readout time of the camera in ms (184.4ms for ultra quiet scan)
 
-'bckg'                  : True,      # if 'True' background is added
-'NR'                    : False,     # 'True' for NR and ER digitization, 'False' for only ER
+'bckg'                  : False,      # if 'True' background is added
+'NR'                    : True,     # 'True' for NR and ER digitization, 'False' for only ER
 'SRIM'                  : False,      # 'True' for SRIM NR simulations
 'NR_list'               : , #'NRlist_AmBeISO_LIME_neutrons_50cmPE_10cmCu_NOPb_10umStep', # Name of the SRIM MC NR_list file   
 'GEANT4isotopes'        : False,      # specify if you are digitizing tracks from radioactive isotope GEANT4 simulations
