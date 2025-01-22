@@ -1759,6 +1759,9 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                     
                     auto startampli = std::chrono::steady_clock::now();
                     // Applying GEM3 amplification
+                    
+                    
+                    
                     for(int xx = 0; xx<x_n_bin-1; xx++){
                         for(int yy=0; yy<y_n_bin-1; yy++) {
                             for(int zz=0; zz<z_n_bin-1; zz++){
@@ -1816,6 +1819,10 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         vector<int> center = {(int)(static_cast<double>(x_pix)*xy_vox_scale/2.)+translation[0],
                               (int)(static_cast<double>(y_pix)*xy_vox_scale/2.)+translation[1]
                              };
+                             
+        // DEBUG
+        //cout<<"c   = ("<<center[0]<<","<<center[1]<<")"<<endl;
+        
         // cout<<"Center: "<<center[0]<<", "<<center[1]<<endl;
         int x_start = max(0, center[0] -    (int)hout.size()/2);
         int y_start = max(0, center[1] - (int)hout[0].size()/2);
@@ -1828,7 +1835,7 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         cout<<y_end<<endl;
         for(int xx=x_start; xx<x_end; xx++){
             for(int yy=y_start; yy<y_end; yy++){
-                array2d_Nph[xx/xy_vox_scale][yy/xy_vox_scale]=hout[xx-x_start][yy-y_start];
+                array2d_Nph[xx/xy_vox_scale][yy/xy_vox_scale]+=hout[xx-x_start][yy-y_start];
             }
         }
         
