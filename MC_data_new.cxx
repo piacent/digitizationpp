@@ -333,7 +333,7 @@ int main(int argc, char** argv)
             
             auto outfile = shared_ptr<TFile> {TFile::Open(fileoutname.c_str(),
                                                           "RECREATE") };
-            outfile->mkdir("event_info");
+            //outfile->mkdir("event_info");
             SaveValues(options,outfile);
             
             //Output file branches
@@ -986,7 +986,7 @@ int main(int argc, char** argv)
                 final_image.Write();
                 
             }
-            outfile->cd("event_info");
+            //outfile->cd("event_info");
             outtree->Write();
             
             cout<<Form("COMPLETED RUN %d",run_count)<<endl;
@@ -1379,8 +1379,13 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         // FIXME: find best value of maxvolume. 1e8 might not me the best one
         long int max_3Dhisto_volume=(long int)5e+7;  // (volume in number of voxels) that's around 0.5*1.6 GB of RAM
         
-        double xbin_dim = stod(options["x_vox_dim"]); //opt.x_dim/opt.x_pix
-        double ybin_dim = stod(options["y_vox_dim"]); //opt.y_dim/opt.y_pix
+        int xy_vox_scale = stoi(options["xy_vox_scale"]);
+        
+        int x_pix = stoi(options["x_pix"]);
+        int y_pix = stoi(options["y_pix"]);
+        
+        double xbin_dim = stod(options["x_dim"]) / x_pix / xy_vox_scale;
+        double ybin_dim = stod(options["y_dim"]) / y_pix / xy_vox_scale;
         double zbin_dim = stod(options["z_vox_dim"]);
         
         
@@ -1504,7 +1509,9 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                     int zz = key % N ;
                     int yy = ((key - zz) / N) % M;
                     int xx = (key - yy * N - zz) / N / M;
-                    hout[xx][yy]+=Nph_saturation(val, optA, optbeta);
+                    
+                    // optbeta is multiplied by factors to normalize on volume chosen
+                    hout[xx][yy]+=Nph_saturation(val, optA, optbeta*xy_vox_scale*xy_vox_scale*0.1/zbin_dim);
                 }
                 auto endampli = std::chrono::steady_clock::now();
                 dur_ampli=dur_ampli+endampli-startampli;
@@ -1578,7 +1585,9 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                     int zz = key % N ;
                     int yy = ((key - zz) / N) % M;
                     int xx = (key - yy * N - zz) / N / M;
-                    hout[xx][yy]+=Nph_saturation(val, optA, optbeta);
+                    
+                    // optbeta is multiplied by factors to normalize on volume chosen
+                    hout[xx][yy]+=Nph_saturation(val, optA, optbeta*xy_vox_scale*xy_vox_scale*0.1/zbin_dim);
                 }
                 auto endampli = std::chrono::steady_clock::now();
                 dur_ampli=dur_ampli+endampli-startampli;
@@ -1588,8 +1597,8 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         } else {
             double deltaZ=max(2*stod(options["z_vox_dim"]),
                               stod(options["z_vox_dim"]) * max_3Dhisto_volume /
-                                (deltaX / stod(options["x_vox_dim"])) /
-                                (deltaY / stod(options["y_vox_dim"]))
+                                (deltaX / xbin_dim) /
+                                (deltaY / ybin_dim)
                               );
             
             vector<double> split_vals = arange(zmin, zmax, deltaZ);
@@ -1676,7 +1685,10 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                             for(int zz=0; zz<z_n_bin-1; zz++){
                                 if(hc[xx][yy][zz] != 0.) {
                                     not_empty++;
-                                    hout[xx][yy]+=Nph_saturation(hc[xx][yy][zz], optA, optbeta);
+                                    
+                                    
+                                    // optbeta is multiplied by factors to normalize on volume chosen
+                                    hout[xx][yy]+=Nph_saturation(hc[xx][yy][zz], optA, optbeta*xy_vox_scale*xy_vox_scale*0.1/zbin_dim);
                                 }
                             }
                         }
@@ -1726,12 +1738,17 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                     
                     auto startampli = std::chrono::steady_clock::now();
                     // Applying GEM3 amplification
+                    
+                    
+                    
                     for(int xx = 0; xx<x_n_bin-1; xx++){
                         for(int yy=0; yy<y_n_bin-1; yy++) {
                             for(int zz=0; zz<z_n_bin-1; zz++){
                                 if(hc[xx][yy][zz] != 0.) {
                                     not_empty++;
-                                    hout[xx][yy]+=Nph_saturation(hc[xx][yy][zz], optA, optbeta);
+                                    
+                                    // optbeta is multiplied by factors to normalize on volume chosen
+                                    hout[xx][yy]+=Nph_saturation(hc[xx][yy][zz], optA, optbeta*xy_vox_scale*xy_vox_scale*0.1/zbin_dim);
                                 }
                             }
                         }
@@ -1764,24 +1781,46 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         // FIXME: Write a function padding()
         //Define a translation vector
         
-        int x_center_cloud=(int)round(((xmax+xmin)/2.)/stod(options["x_vox_dim"]));
-        int y_center_cloud=(int)round(((ymax+ymin)/2.)/stod(options["y_vox_dim"]));
+        // DEBUG
+        //int sommatotale =0;
+        //
+        //sommatotale = accumulate(hout.cbegin(), hout.cend(), 0, [](auto sum, const auto& row) {
+        //            return accumulate(row.cbegin(), row.cend(), sum);
+        //        });
+        //
+        //cout<<"INT = "<<sommatotale<<endl;
+        
+        int x_center_cloud=(int)round(((xmax+xmin)/2.)/xbin_dim);
+        int y_center_cloud=(int)round(((ymax+ymin)/2.)/ybin_dim);
+        
+        //DEBUG
+        //cout<<"cc   = ("<<x_center_cloud<<","<<y_center_cloud<<")"<<endl;
+        
         //cout<<"x_center_cloud "<<x_center_cloud<<endl;
         //cout<<"y_center_cloud "<<y_center_cloud<<endl;
         vector<int> translation = {x_center_cloud, y_center_cloud};
         // Calculate the center position of the original array in the padded array
-        vector<int> center = {(int)(stod(options["x_pix"])/2.)+translation[0],
-                              (int)(stod(options["y_pix"])/2.)+translation[1]
+        vector<int> center = {(int)(stod(options["x_pix"])*xy_vox_scale/2.)+translation[0],
+                              (int)(stod(options["y_pix"])*xy_vox_scale/2.)+translation[1]
                              };
+                             
+        // DEBUG
+        //cout<<"c   = ("<<center[0]<<","<<center[1]<<")"<<endl;
+        
         // cout<<"Center: "<<center[0]<<", "<<center[1]<<endl;
         int x_start = max(0, center[0] -    (int)hout.size()/2);
         int y_start = max(0, center[1] - (int)hout[0].size()/2);
-        int x_end   = min(stoi(options["x_pix"]), x_start + (int)hout.size());
-        int y_end   = min(stoi(options["y_pix"]), y_start + (int)hout[0].size());
+        int x_end   = min(stoi(options["x_pix"])*xy_vox_scale, x_start + (int)hout.size());
+        int y_end   = min(stoi(options["y_pix"])*xy_vox_scale, y_start + (int)hout[0].size());
+        
+        // DEBUG
+        //cout<<"start = ("<<x_start<<","<<y_start<<")"<<endl;
+        //cout<<"end   = ("<<x_end  <<","<<  y_end<<")"<<endl;
+        
         // cout<<"PADDING ["<<x_start<<":"<<x_end<<","<<y_start<<":"<<y_end<<"]"<<endl;
         for(int xx=x_start; xx<x_end; xx++){
             for(int yy=y_start; yy<y_end; yy++){
-                array2d_Nph[xx][yy]=hout[xx-x_start][yy-y_start];
+                array2d_Nph[xx/xy_vox_scale][yy/xy_vox_scale]+=hout[xx-x_start][yy-y_start];
             }
         }
         

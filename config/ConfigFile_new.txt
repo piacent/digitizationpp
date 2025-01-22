@@ -40,9 +40,8 @@
 
 # saturation parameters
 'saturation'            : True,      # if 'True' saturation effect is applied on GEM3    
-'x_vox_dim'             : 0.1501736, # x voxel size in [mm]
-'y_vox_dim'             : 0.1501736, # y voxel size in [mm]
 'z_vox_dim'             : 0.1,       # z voxel size in [mm]
+'xy_vox_scale'          : 1,         # pixel size / xy voxel dimension (MUST be integer AND >= 1)
 'A'                     : 1.52,        # free parameter (total scale factor MC/data)
 'beta'                  : 1.0e-5,    # saturation parameter   
 
