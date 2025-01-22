@@ -37,10 +37,6 @@
 'beta'                  : 1.0e-5,    # saturation parameter
 'z_vox_dim'             : 0.1,       # z voxel size in [mm]
 'zcloud'		: 20,        # z dimension of the electron cloud in [mm]
-'x_vox_min'		: 950,       # x voxel min of the electron cloud (voxels in the GEM plane correspond to pixels)
-'x_vox_max'		: 1350,      # x voxel max of the electron cloud (voxels in the GEM plane correspond to pixels)
-'y_vox_min'		: 950,       # y voxel min of the electron cloud (voxels in the GEM plane correspond to pixels)
-'y_vox_max'		: 1350,      # y voxel max of the electron cloud (voxels in the GEM plane correspond to pixels)
 
 # Background
 'bckg'                  : True,      # if 'True' background is added
