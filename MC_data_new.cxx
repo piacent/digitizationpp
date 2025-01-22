@@ -1385,7 +1385,7 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         int y_pix = stoi(options["y_pix"]);
         
         double xbin_dim = stod(options["x_dim"]) / x_pix / xy_vox_scale;
-        double ybin_dim = stod(options["y_dim"]) / x_pix / xy_vox_scale;
+        double ybin_dim = stod(options["y_dim"]) / y_pix / xy_vox_scale;
         double zbin_dim = stod(options["z_vox_dim"]);
         
         
@@ -1509,6 +1509,8 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                     int zz = key % N ;
                     int yy = ((key - zz) / N) % M;
                     int xx = (key - yy * N - zz) / N / M;
+                    
+                    // optbeta is multiplied by factors to normalize on volume chosen
                     hout[xx][yy]+=Nph_saturation(val, optA, optbeta*xy_vox_scale*xy_vox_scale*0.1/zbin_dim);
                 }
                 auto endampli = std::chrono::steady_clock::now();
@@ -1583,6 +1585,8 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                     int zz = key % N ;
                     int yy = ((key - zz) / N) % M;
                     int xx = (key - yy * N - zz) / N / M;
+                    
+                    // optbeta is multiplied by factors to normalize on volume chosen
                     hout[xx][yy]+=Nph_saturation(val, optA, optbeta*xy_vox_scale*xy_vox_scale*0.1/zbin_dim);
                 }
                 auto endampli = std::chrono::steady_clock::now();
@@ -1681,6 +1685,9 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                             for(int zz=0; zz<z_n_bin-1; zz++){
                                 if(hc[xx][yy][zz] != 0.) {
                                     not_empty++;
+                                    
+                                    
+                                    // optbeta is multiplied by factors to normalize on volume chosen
                                     hout[xx][yy]+=Nph_saturation(hc[xx][yy][zz], optA, optbeta*xy_vox_scale*xy_vox_scale*0.1/zbin_dim);
                                 }
                             }
@@ -1739,6 +1746,8 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                             for(int zz=0; zz<z_n_bin-1; zz++){
                                 if(hc[xx][yy][zz] != 0.) {
                                     not_empty++;
+                                    
+                                    // optbeta is multiplied by factors to normalize on volume chosen
                                     hout[xx][yy]+=Nph_saturation(hc[xx][yy][zz], optA, optbeta*xy_vox_scale*xy_vox_scale*0.1/zbin_dim);
                                 }
                             }
@@ -1811,7 +1820,7 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         // cout<<"PADDING ["<<x_start<<":"<<x_end<<","<<y_start<<":"<<y_end<<"]"<<endl;
         for(int xx=x_start; xx<x_end; xx++){
             for(int yy=y_start; yy<y_end; yy++){
-                array2d_Nph[xx/(int)xy_vox_scale][yy/(int)xy_vox_scale]+=hout[xx-x_start][yy-y_start];
+                array2d_Nph[xx/xy_vox_scale][yy/xy_vox_scale]+=hout[xx-x_start][yy-y_start];
             }
         }
         
