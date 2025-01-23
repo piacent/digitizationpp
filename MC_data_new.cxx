@@ -595,7 +595,7 @@ int main(int argc, char** argv)
                     
                     for(unsigned int xx =0; xx < background.size(); xx++) {
                         for(unsigned int yy =0; yy < background[0].size(); yy++) {
-                            final_image.SetBinContent(xx, yy, background[xx][yy]);
+                            final_image.SetBinContent(xx+1, yy+1, background[xx][yy]);
                         }
                     }
                     
@@ -792,7 +792,7 @@ int main(int argc, char** argv)
                         
                         for(unsigned int xx =0; xx < background.size(); xx++) {
                             for(unsigned int yy =0; yy < background[0].size(); yy++) {
-                                final_image.SetBinContent(xx, yy, background[xx][yy]);
+                                final_image.SetBinContent(xx+1, yy+1, background[xx][yy]);
                             }
                         }
                         
@@ -875,7 +875,7 @@ int main(int argc, char** argv)
                     for(unsigned int yy =0; yy < array2d_Nph[0].size(); yy++) {
                         
                         int binc = background[xx][yy]+(int)array2d_Nph[array2d_Nph.size()-1-xx][yy];
-                        final_image.SetBinContent(xx, yy, binc);
+                        final_image.SetBinContent(xx+1, yy+1, binc);
                     }
                 }
                 
@@ -938,7 +938,7 @@ int main(int argc, char** argv)
                         
                         for(unsigned int xx =0; xx < background.size(); xx++) {
                             for(unsigned int yy =0; yy < background[0].size(); yy++) {
-                                final_image_cut.SetBinContent(xx, yy, background[xx][yy]);
+                                final_image_cut.SetBinContent(xx+1, yy+1, background[xx][yy]);
                             }
                         }
                         
