@@ -582,8 +582,8 @@ int main(int argc, char** argv)
                 nhits_og = numhits;
 
 
-                vector<vector<int>> background(y_pix,
-                                               vector<int>(x_pix, 0));
+                vector<vector<int>> background(x_pix,
+                                               vector<int>(y_pix, 0));
                                                
                 AddBckg(options, background);
                 
@@ -595,7 +595,7 @@ int main(int argc, char** argv)
                     
                     for(unsigned int xx =0; xx < background.size(); xx++) {
                         for(unsigned int yy =0; yy < background[0].size(); yy++) {
-                            final_image.SetBinContent(yy, xx, background[xx][yy]);
+                            final_image.SetBinContent(xx, yy, background[xx][yy]);
                         }
                     }
                     
@@ -792,7 +792,7 @@ int main(int argc, char** argv)
                         
                         for(unsigned int xx =0; xx < background.size(); xx++) {
                             for(unsigned int yy =0; yy < background[0].size(); yy++) {
-                                final_image.SetBinContent(yy, xx, background[xx][yy]);
+                                final_image.SetBinContent(xx, yy, background[xx][yy]);
                             }
                         }
                         
@@ -804,8 +804,8 @@ int main(int argc, char** argv)
                     }
                 }
                 
-                vector<vector<double>> array2d_Nph(y_pix,
-                                                   vector<double>(x_pix, 0.0));
+                vector<vector<double>> array2d_Nph(x_pix,
+                                                   vector<double>(y_pix, 0.0));
                 
                 auto ta = std::chrono::steady_clock::now();
                 // with saturation
@@ -839,8 +839,8 @@ int main(int argc, char** argv)
                 
                 if(options["Vignetting"]=="True") {
                     TrackVignetting(array2d_Nph,
-                                    y_pix,
                                     x_pix,
+                                    y_pix,
                                     VignMap);
                 }
                 
@@ -871,12 +871,11 @@ int main(int argc, char** argv)
                                  x_pix, -0.5, x_pix -0.5,
                                  y_pix, -0.5, y_pix -0.5);
                 
-                for(unsigned int xx =0; xx < array2d_Nph[0].size(); xx++) {
-                    for(unsigned int yy =0; yy < array2d_Nph.size(); yy++) {
-                        // DEBUG
-                        //int binc = (int)array2d_Nph[yy][array2d_Nph[0].size()-xx];
-                        int binc = background[xx][yy]+(int)array2d_Nph[yy][array2d_Nph[0].size()-xx];
-                        final_image.SetBinContent(yy, xx, binc);
+                for(unsigned int xx =0; xx < array2d_Nph.size(); xx++) {
+                    for(unsigned int yy =0; yy < array2d_Nph[0].size(); yy++) {
+                        
+                        int binc = background[xx][yy]+(int)array2d_Nph[array2d_Nph.size()-1-xx][yy];
+                        final_image.SetBinContent(xx, yy, binc);
                     }
                 }
                 
@@ -939,7 +938,7 @@ int main(int argc, char** argv)
                         
                         for(unsigned int xx =0; xx < background.size(); xx++) {
                             for(unsigned int yy =0; yy < background[0].size(); yy++) {
-                                final_image_cut.SetBinContent(yy, xx, background[xx][yy]);
+                                final_image_cut.SetBinContent(xx, yy, background[xx][yy]);
                             }
                         }
                         
@@ -1299,7 +1298,7 @@ void AddBckg(map<string,string>& options, vector<vector<int>>& background) {
 
         for(int i = 0; i<pic->GetNbinsX()-1; i++) {
             for (int j =0; j<pic->GetNbinsY()-1; j++) {
-                background[i][j] = pic->GetBinContent(j, i);
+                background[i][j] = pic->GetBinContent(i+1,j+1);
             }
         }
         //throw runtime_error("DEBUG");
@@ -1829,10 +1828,7 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         int x_end   = min(x_pix*xy_vox_scale, x_start + (int)hout.size());
         int y_end   = min(y_pix*xy_vox_scale, y_start + (int)hout[0].size());
         // cout<<"PADDING ["<<x_start<<":"<<x_end<<","<<y_start<<":"<<y_end<<"]"<<endl;
-        cout<<x_start<<endl;
-        cout<<x_end<<endl;
-        cout<<y_start<<endl;
-        cout<<y_end<<endl;
+        
         for(int xx=x_start; xx<x_end; xx++){
             for(int yy=y_start; yy<y_end; yy++){
                 array2d_Nph[xx/xy_vox_scale][yy/xy_vox_scale]+=hout[xx-x_start][yy-y_start];
@@ -2097,8 +2093,8 @@ void TrackVignetting(vector<vector<double>>& arrTr, int xpix, int ypix, const TH
         for(int yy = 0; yy < ypix; yy++) {
             if(arrTr[xx][yy] != 0) {
                 arrTr[xx][yy]=round(arrTr[xx][yy] *
-                                    VignMap.GetBinContent(VignMap.GetXaxis()->FindBin(yy),
-                                                          VignMap.GetYaxis()->FindBin(xx)
+                                    VignMap.GetBinContent(VignMap.GetXaxis()->FindBin(xx),
+                                                          VignMap.GetYaxis()->FindBin(yy)
                                                           )
                                     );
             }
