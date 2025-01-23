@@ -417,7 +417,7 @@ int main(int argc, char** argv)
             Int_t numhits;
             Double_t energyDep;
             Double_t energyDep_NR;
-            Float_t  ekin_particle;
+            Double_t  ekin_particle;
             Int_t particle_type;
             vector<int>    *pdgID_hits = 0;
             vector<double> *tracklen_hits = 0;
@@ -508,6 +508,7 @@ int main(int argc, char** argv)
                     // started by a photon or an electron
                 }
 
+                if(entry <= 100 || entry > 200) continue;
                 if(options["NR"]=="False" && NR_flag==true ) continue;
                 if(options["SRIM"]=="True"  && ekin_particle>900) continue;     //not corrected for SRIM
                 
@@ -1429,7 +1430,9 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                 int WID = stoi(options["WID"]);
                 int nparts = 1 + x_hits_tr.size()/WID;
                 for(int part = 0; part < nparts; part++) {
-                    cout<<"   part "<<part<<"/"<<nparts<<"..."<<endl;
+                
+                    //if ((part*100/nparts)%10==0) cout<<"   progress "<<part*100/nparts<<" %"<<"..."<<endl;
+                    //cout<<"   part "<<part<<"/"<<nparts<<"..."<<endl;
                     int hit_tr_idx = part*WID;
                     int hit_tr_idx_up = min((part+1)*WID,(int)x_hits_tr.size());
                     S3D_x.clear();
@@ -1486,6 +1489,8 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                             for(auto it=paralmap.begin();it!=paralmap.end();++it) hcmap[it->first] = hcmap[it->first] + paralmap[it->first];               //Here auto would be std:map<long int,int>::iterator
                         });
                     });
+                    
+                    
                     
                     //End parallel version
 
@@ -1624,7 +1629,10 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                     cout<<"Amplifying voxel region z=["<<split_vals[i]<<","<<split_vals[i+1]<<"] "<<i<<"/"<<split_vals.size()-1-1<<endl;
                     
                     for(int part = 0; part < nparts; part++) {
-                        cout<<"   part "<<part<<"/"<<nparts<<"..."<<endl;
+                        
+                        //if ((part*100/nparts)%10==0) cout<<"   progress "<<part*100/nparts<<" %"<<"..."<<endl<<flush;
+                        //cout<<"   part "<<part<<"/"<<nparts<<"..."<<endl;
+                        
                         int hit_tr_idx = part*WID;
                         int hit_tr_idx_up = min((part+1)*WID,(int)x_hits_tr.size());
                         S3D_x.clear();
@@ -1674,7 +1682,8 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                         dur_criti=dur_criti+endcriti-startcriti;
 
                     }
-
+                    
+                    //cout<<endl;
                     long int LL = (x_n_bin)*(y_n_bin)*(z_n_bin);
                     long int not_empty=0;
                     auto startampli = std::chrono::steady_clock::now();
@@ -1732,7 +1741,7 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                     auto endcriti = std::chrono::steady_clock::now();
                     dur_criti=dur_criti+endcriti-startcriti;
                     
-
+                    //cout<<endl;
                     long int LL = (x_n_bin)*(y_n_bin)*(z_n_bin);
                     long int not_empty=0;
                     
