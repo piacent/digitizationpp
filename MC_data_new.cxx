@@ -754,7 +754,7 @@ int main(int argc, char** argv)
                         //    <<z_hits_tr.size()<<","<<energy_hits.size()<<"]"<<endl;
                         
                     } else if (randcut>stod(options["exposure_time"])) {
-                        double y_cut_tmp = stod(options["y_dim"]) * (0.5 - (randcut - stod(options["exposure_time"])) / readout_time)-3.;
+                        double y_cut_tmp = stod(options["y_dim"]) * (0.5 - (randcut - stod(options["exposure_time"])) / readout_time)+3.;
                         
                         // Removing elements from x_hits_tr
                         x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
