@@ -213,7 +213,7 @@ int main(int argc, char** argv)
     omega=1./pow(4.*(demag+1)*aperture,2);
 	
     //Code execution
-    int run_count = 1;
+    int run_count = stoi(options["start_run_number"]);
     auto t0 = std::chrono::steady_clock::now();
     
     if(options["fixed_seed"]=="True" || options["fixed_seed"]=="true") gRandom->SetSeed(10);

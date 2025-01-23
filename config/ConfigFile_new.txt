@@ -53,6 +53,7 @@
 'Vig_Map'		: 'vignette_runs03930to03932.root',
 
 # Operative parameters
+'start_run_number'      : 13,	    # first number for outputfile: histograms_Run<start_run_number%5d>.root
 'NR'                    : True,     # 'True' for NR and ER digitization, 'False' for only ER
 'SRIM'                  : False,      # 'True' for SRIM NR simulations
 'NR_list'               : , #'NRlist_AmBeISO_LIME_neutrons_50cmPE_10cmCu_NOPb_10umStep', # Name of the SRIM MC NR_list file   
