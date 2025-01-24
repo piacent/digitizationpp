@@ -492,6 +492,27 @@ int main(int argc, char** argv)
                 VignMap.Smooth();
                 
                 VignFile->Close();
+
+                int x_vign=VignMap.GetNbinsX();
+                int y_vign=VignMap.GetNbinsY();
+
+                if(x_vign!=y_vign)
+                {
+                    if(x_pix==y_pix)
+                    {
+                        cerr<<"You are using a Quest vignette map with a Fusion simulation! Digitization FAILED!\n";
+                        exit(0);
+                    }
+                }
+                else
+                {
+                    if(x_pix!=y_pix)
+                    {
+                        cerr<<"You are using a Fusion vignette map with a Quest simulation! Digitization FAILED!\n";
+                        exit(0);
+                    }
+
+                }
             }
             
             //DEBUG
@@ -1294,7 +1315,27 @@ void AddBckg(map<string,string>& options, vector<vector<int>>& background) {
         
         cout<<"Using pic # "<<pic_index<<" out of "<<flength<<" as a pedestal..."<<endl;
         TH2I* pic = fin->Get<TH2I>(Form("pic_%d", pic_index));
-        
+
+        int x_ped=pic->GetNbinsX();
+        int y_ped=pic->GetNbinsY();
+        //Check pedestal and simulation have same camera settings
+        if(x_ped!=y_ped)
+        {
+            if(x_pix==y_pix)
+            {
+                cerr<<"You are using a Quest pedestal map with a Fusion simulation! Digitization FAILED!\n";
+                exit(0);
+            }
+        }
+        else
+        {
+            if(x_pix!=y_pix)
+            {
+                cerr<<"You are using a Fusion pedestal map with a Quest simulation! Digitization FAILED!\n";
+                exit(0);
+            }
+
+        }
 
         for(int i = 0; i<pic->GetNbinsX()-1; i++) {
             for (int j =0; j<pic->GetNbinsY()-1; j++) {
