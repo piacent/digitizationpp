@@ -487,7 +487,7 @@ int main(int argc, char** argv)
                 cout<<"Opening "<<vignfilename<<"..."<<endl;
                 auto VignFile = unique_ptr<TFile> {TFile::Open(vignfilename.c_str())};
                 
-                VignMap = (*(TH2F*)VignFile->Get("normmap_lime"));
+                VignMap = (*(TH2F*)VignFile->Get("normmap"));
                 
                 VignMap.Smooth();
                 
@@ -495,7 +495,7 @@ int main(int argc, char** argv)
             }
             
             //DEBUG
-            //cout<<"DEBUG: "<<VignMap->GetBinContent(0,0)<<endl;
+            //cout<<"DEBUG: "<<VignMap.GetBinContent(100,100)<<endl;
             
             for(int entry=0; entry<totev; entry++) {  // RUNNING ON ENTRIES
                 
