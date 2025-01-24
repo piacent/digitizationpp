@@ -774,7 +774,7 @@ int main(int argc, char** argv)
                             return y > y_cut_tmp;
                         }), y_hits_tr.end());
                         
-                        row_cut = y_pix - (int)((randcut-readout_time) * static_cast<double>(y_pix) / readout_time);
+                        row_cut = y_pix - (int)((randcut-stod(options["exposure_time"])) * static_cast<double>(y_pix) / readout_time);
                         
                         //DEBUG
                         //cout<<"y_cut_tmp = "<<y_cut_tmp<<endl;
@@ -884,7 +884,7 @@ int main(int argc, char** argv)
                 if (options["exposure_time_effect"]=="True") {
                     if (randcut<readout_time) {
                         double y_cut_tmp = stod(options["y_dim"]) * (0.5 - randcut/readout_time);
-                        
+
                         // Removing elements from x_hits_tr
                         x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
                             return y_hits_tr[&x-&*x_hits_tr.begin()] < y_cut_tmp;
@@ -905,7 +905,7 @@ int main(int argc, char** argv)
                         
                     } else if (randcut> stod(options["exposure_time"]) ) {
                         double y_cut_tmp = stod(options["y_dim"]) * (0.5 - (randcut - stod(options["exposure_time"])) / readout_time);
-                        
+
                         // Removing elements from x_hits_tr
                         x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
                             return y_hits_tr[&x-&*x_hits_tr.begin()] > y_cut_tmp;
