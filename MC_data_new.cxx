@@ -713,13 +713,13 @@ int main(int argc, char** argv)
                 
                 x_vertex = (x_hits_tr[0] + 0.5 * stod(options["x_dim"]) )*static_cast<double>(x_pix)/stod(options["x_dim"]); //in pixels
                 y_vertex = (y_hits_tr[0] + 0.5 * stod(options["y_dim"]) )*static_cast<double>(y_pix)/stod(options["y_dim"]); //in pixels
-                z_vertex = abs(z_hits_tr[0]-stod(options["z_gem"])); //distance from GEMs in mm
+                z_vertex = (z_hits_tr[0]+stod(options["z_extra"])); //distance from GEMs in mm
                 // DEBUG
                 //cout<<"x_vertex = "<<x_vertex<<" ### y_vertex = "<<y_vertex<<" ### z_vertex = "<<z_vertex<<endl;
                 
                 x_vertex_end = (x_hits_tr[numhits-1] + 0.5 * stod(options["x_dim"])) * static_cast<double>(x_pix) / stod(options["x_dim"]); //in pixels
                 y_vertex_end = (y_hits_tr[numhits-1] + 0.5 * stod(options["y_dim"])) * static_cast<double>(y_pix) / stod(options["y_dim"]); //in pixels
-                z_vertex_end = abs(z_hits_tr[numhits-1]-stod(options["z_gem"])); //distance from GEMs in mm
+                z_vertex_end = (z_hits_tr[numhits-1]+stod(options["z_extra"])); //distance from GEMs in mm
                 //DEBUG
                 //cout<<"x_vertex_end = "<<x_vertex_end<<" ### y_vertex_end = "<<y_vertex_end<<" ### z_vertex_end = "<<z_vertex_end<<endl;
                 
@@ -727,14 +727,14 @@ int main(int argc, char** argv)
                 x_max = (*max_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * stod(options["x_dim"])) * static_cast<double>(x_pix) / stod(options["x_dim"]);
                 y_min = (*min_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * static_cast<double>(y_pix) / stod(options["y_dim"]);
                 y_max = (*max_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * static_cast<double>(y_pix) / stod(options["y_dim"]);
-                z_min = min(abs(*max_element(z_hits_tr.begin(),
-                                             z_hits_tr.end()) - stod(options["z_gem"])),
-                            abs(*min_element(z_hits_tr.begin(),
-                                             z_hits_tr.end()) - stod(options["z_gem"])));
-                z_max = max(abs(*max_element(z_hits_tr.begin(),
-                                             z_hits_tr.end()) - stod(options["z_gem"])),
-                            abs(*min_element(z_hits_tr.begin(),
-                                             z_hits_tr.end()) - stod(options["z_gem"])));
+                z_min = min((*max_element(z_hits_tr.begin(),
+                                             z_hits_tr.end()) + stod(options["z_extra"])),
+                            (*min_element(z_hits_tr.begin(),
+                                             z_hits_tr.end()) + stod(options["z_extra"])));
+                z_max = max((*max_element(z_hits_tr.begin(),
+                                             z_hits_tr.end()) + stod(options["z_extra"])),
+                            (*min_element(z_hits_tr.begin(),
+                                             z_hits_tr.end()) + stod(options["z_extra"])));
                 //DEBUG
                 //cout<<" x_min = "<<x_min<<" x_max = "<<x_max<<" y_min = "<<y_min<<" y_max = "<<y_max<<" z_min = "<<z_min<<" z_max = "<<z_max<<endl;
                 
@@ -988,14 +988,14 @@ int main(int argc, char** argv)
                 x_max_cut = (*max_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * stod(options["x_dim"])) * static_cast<double>(x_pix) / stod(options["x_dim"]);
                 y_min_cut = (*min_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * static_cast<double>(y_pix) / stod(options["y_dim"]);
                 y_max_cut = (*max_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * static_cast<double>(y_pix) / stod(options["y_dim"]);
-                z_min_cut = min(abs(*max_element(z_hits_tr.begin(),
-                                                 z_hits_tr.end()) - stod(options["z_gem"])),
-                                abs(*min_element(z_hits_tr.begin(),
-                                                 z_hits_tr.end()) - stod(options["z_gem"])));
-                z_max_cut = max(abs(*max_element(z_hits_tr.begin(),
-                                                 z_hits_tr.end()) - stod(options["z_gem"])),
-                                abs(*min_element(z_hits_tr.begin(),
-                                                 z_hits_tr.end()) - stod(options["z_gem"])));
+                z_min_cut = min((*max_element(z_hits_tr.begin(),
+                                                 z_hits_tr.end()) + stod(options["z_extra"])),
+                                (*min_element(z_hits_tr.begin(),
+                                                 z_hits_tr.end()) + stod(options["z_extra"])));
+                z_max_cut = max((*max_element(z_hits_tr.begin(),
+                                                 z_hits_tr.end()) + stod(options["z_extra"])),
+                                (*min_element(z_hits_tr.begin(),
+                                                 z_hits_tr.end()) + stod(options["z_extra"])));
                 //DEBUG
                 //cout<<" x_min_cut = "<<x_min_cut<<" x_max_cut = "<<x_max_cut<<" y_min_cut = "<<y_minv<<" y_max_cut = "<<y_max_cut<<" z_min_cut = "<<z_min_cut<<" z_max_cut = "<<z_max_cut<<endl;
                 
@@ -1188,8 +1188,8 @@ vector<double> NelGEM2(const vector<double>& energyDep, const vector<double>& z_
     transform(energyDep.begin(),energyDep.end(),back_inserter(n_ioniz_el_ini), [&] (double a) { return a/opt_pot;});
     
     vector<double> drift_l;
-    int opt_gem=stod(options["z_gem"]);
-    transform(z_hit.begin(),z_hit.end(),back_inserter(drift_l), [&] (double a) { return abs(a-opt_gem);});
+    int opt_gem=stod(options["z_extra"]);
+    transform(z_hit.begin(),z_hit.end(),back_inserter(drift_l), [&] (double a) { return a+opt_gem;});
     
     vector<double> n_ioniz_el_mean(n_ioniz_el_ini.size(), 0.0);
     
@@ -1433,14 +1433,15 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
     if (x_hits_tr.size() == 0) return;
     // if there are electrons on GEM3, apply saturation effect
     else {
-        double OFF = 10.;
+        double OFF = 15;
+        double OFFz = 10.;
 
         double xmin = (*min_element(x_hits_tr.begin(), x_hits_tr.end()))-OFF;
         double xmax = (*max_element(x_hits_tr.begin(), x_hits_tr.end()))+OFF;
         double ymin = (*min_element(y_hits_tr.begin(), y_hits_tr.end()))-OFF;
         double ymax = (*max_element(y_hits_tr.begin(), y_hits_tr.end()))+OFF;
-        double zmin = (*min_element(z_hits_tr.begin(), z_hits_tr.end()))-OFF;
-        double zmax = (*max_element(z_hits_tr.begin(), z_hits_tr.end()))+OFF;
+        double zmin = (*min_element(z_hits_tr.begin(), z_hits_tr.end()))-OFFz;
+        double zmax = (*max_element(z_hits_tr.begin(), z_hits_tr.end()))+OFFz;
         
         double deltaX = abs(xmax-xmin);
         double deltaY = abs(ymax-ymin);
@@ -1949,8 +1950,8 @@ void cloud_smearing3D(vector<double>& x_hits_tr,
     //}
     
     vector<double> dz;
-    int opt_gem=stod(options["z_gem"]);
-    transform(z_hits_tr.begin(),z_hits_tr.end(),back_inserter(dz), [&] (double a) { return abs(a-opt_gem);});
+    int opt_gem=stod(options["z_extra"]);
+    transform(z_hits_tr.begin(),z_hits_tr.end(),back_inserter(dz), [&] (double a) { return a+opt_gem;});
 
     vector<double> sigma_x = compute_sigma(stod(options["diff_const_sigma0T"]), stod(options["diff_coeff_T"]), dz);
     vector<double> sigma_y = compute_sigma(stod(options["diff_const_sigma0T"]), stod(options["diff_coeff_T"]), dz);
@@ -1991,8 +1992,8 @@ void ph_smearing2D(vector<double>& x_hits_tr,
     });
     
     vector<double> dz;
-    int opt_gem=stod(options["z_gem"]);
-    transform(z_hits_tr.begin(),z_hits_tr.end(),back_inserter(dz), [&] (double a) { return abs(a-opt_gem);});
+    int opt_gem=stod(options["z_extra"]);
+    transform(z_hits_tr.begin(),z_hits_tr.end(),back_inserter(dz), [&] (double a) { return a+opt_gem;});
     
     vector<double> sigma_xy = compute_sigma(stod(options["diff_const_sigma0T"]), stod(options["diff_coeff_T"]), dz);
     
@@ -2102,7 +2103,6 @@ void smear_parallel(const vector<double>& x_axis_hit,const vector<double>& y_axi
 
     //std::chrono::duration<double> dur=endstep4-startstep4;
     //std::cout << "Slowest Time smear part " << dur.count() << " seconds" <<std::endl;
-
 
     return ;
 }
