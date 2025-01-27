@@ -51,6 +51,7 @@ int y_pix;
 double optcounts_per_photon;
 double y_sensor_size;
 double readout_time;
+int num_threads;
 
 
 
@@ -211,6 +212,8 @@ int main(int argc, char** argv)
     double demag=y_dim/y_sensor_size;
     double aperture=stod(options["camera_aperture"]);
     omega=1./pow(4.*(demag+1)*aperture,2);
+
+    num_threads=stoi(options["Parallel_threads"]);  //use tbb::info::default_concurrency(); to get all of the available cores
 	
     //Code execution
     int run_count = stoi(options["start_run_number"]);
@@ -1521,8 +1524,6 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                     auto startcriti = std::chrono::steady_clock::now();
                     // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
                     //Parallel version
-                    // Get the default number of threads
-                    int num_threads = 8;    //use tbb::info::default_concurrency(); to get all of them
                     //Types of Mutex: spin -> unfair, unscalable (better for locking things that require little time)
                     //queue ->> fair, scalable
                     //tbb::queuing_mutex myMutex;
@@ -1596,8 +1597,6 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                 
                 auto startcriti = std::chrono::steady_clock::now();
                 //Parallel version
-                // Get the default number of threads
-                int num_threads = 8;    //use tbb::info::default_concurrency(); to get all of them
                 //Types of Mutex: spin -> unfair, unscalable (better for locking things that require little time)
                 //queue ->> fair, scalable
                 //tbb::queuing_mutex myMutex;
@@ -2065,8 +2064,6 @@ void smear_parallel(const vector<double>& x_axis_hit,const vector<double>& y_axi
     //This here is the slowest part
     auto startstep4 = std::chrono::steady_clock::now();
 
-    // Get the default number of threads
-    int num_threads = 8;    //use tbb::info::default_concurrency(); to get all of them
     tbb::spin_mutex myMutex;
     // Run the default parallelism
     tbb::task_arena arena(num_threads);
