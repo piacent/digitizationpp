@@ -642,7 +642,7 @@ void cygnolib::joinMidasPedestals(std::vector<int> &pedruns, std::string ped_clo
 
                     for(unsigned int i = 0; i<vecpic.size(); i++) {
                         for (unsigned int j =0; j<vecpic[0].size(); j++) {
-                            bkg_image.SetBinContent(j, i, vecpic[i][j]);
+                            bkg_image.SetBinContent(j+1, i+1, vecpic[i][j]);
                         }
                     }
                     bkg_image.Write();

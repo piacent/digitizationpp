@@ -895,7 +895,7 @@ int main(int argc, char** argv)
                 for(unsigned int xx =0; xx < array2d_Nph.size(); xx++) {
                     for(unsigned int yy =0; yy < array2d_Nph[0].size(); yy++) {
                         
-                        int binc = background[xx][yy]+(int)array2d_Nph[array2d_Nph.size()-1-xx][yy];
+                        int binc = background[xx][yy]+(int)array2d_Nph[xx][array2d_Nph[0].size()-1-yy];
                         final_image.SetBinContent(xx+1, yy+1, binc);
                     }
                 }
@@ -1337,8 +1337,9 @@ void AddBckg(map<string,string>& options, vector<vector<int>>& background) {
 
         }
 
-        for(int i = 0; i<pic->GetNbinsX()-1; i++) {
-            for (int j =0; j<pic->GetNbinsY()-1; j++) {
+
+        for(int i = 0; i<pic->GetNbinsX(); i++) {
+            for (int j =0; j<pic->GetNbinsY(); j++) {
                 background[i][j] = pic->GetBinContent(i+1,j+1);
             }
         }
