@@ -46,6 +46,14 @@ double omega;
 int x_ini = 0;
 int y_ini = 0;
 int z_ini = 0;
+int x_pix;
+int y_pix;
+double optcounts_per_photon;
+double y_sensor_size;
+double readout_time;
+int num_threads;
+
+
 
 vector<string> split_str(const string& , char );
 void ReadConfig(string name, map<string,string>& options);
@@ -144,12 +152,12 @@ int main(int argc, char** argv)
     }
     else
     {
-        if(argc!=6) {cerr<<"Wrong parameter inputs given!!\nCorrect use: ./progname.exe Configfile -I inputdir -O outputdir"; exit(EXIT_FAILURE);}
+        if(argc!=6) {cerr<<"Wrong parameter inputs given!!\nCorrect use: ./progname.exe Configfile -I inputdir -O outputdir\n"; exit(EXIT_FAILURE);}
         string parseop=argv[2];
         string parseop2=argv[4];
         //cout<< parseop << "   " << parseop2<< endl;
-        if(parseop!="-I" && parseop2!="-I") {cerr<<"Wrong options name!!\nSuggested use: ./progname.exe Configfile -I inputdir -O outputdir"; exit(EXIT_FAILURE);}
-        if(parseop!="-O" && parseop2!="-O") {cerr<<"Wrong options name!!\nSuggested use: ./progname.exe Configfile -I inputdir -O outputdir"; exit(EXIT_FAILURE);}
+        if(parseop!="-I" && parseop2!="-I") {cerr<<"Wrong options name!!\nSuggested use: ./progname.exe Configfile -I inputdir -O outputdir\n"; exit(EXIT_FAILURE);}
+        if(parseop!="-O" && parseop2!="-O") {cerr<<"Wrong options name!!\nSuggested use: ./progname.exe Configfile -I inputdir -O outputdir\n"; exit(EXIT_FAILURE);}
 	
         if(parseop=="-I") {infolder=argv[3]; outfolder=argv[5];}
         else {infolder=argv[5]; outfolder=argv[3];}
@@ -176,14 +184,54 @@ int main(int argc, char** argv)
     cout<< "extraction eff GEM1 = " << extraction_eff_GEM1;
     cout<< "\nextraction eff GEM2 = " << extraction_eff_GEM2;
     cout<< "\nextraction eff GEM3 = " << extraction_eff_GEM3 << endl;
-	
+
+    y_pix = 2304;
+    if(options["Camera_type"]== "Fusion")
+    {
+        x_pix = 2304;
+        optcounts_per_photon = 2.;       //apparently calibrated with LEMOn in the past
+        y_sensor_size = 14.976;         //mm
+        readout_time = 184.4;           //ms in in ultra quiet scan (UQS)
+    }
+    else if(options["Camera_type"]== "Quest1")
+    {
+        x_pix = 4096;
+        optcounts_per_photon = 4.49;     // equal to 2.*2.245 which is the ratio of e/count of the two cameras (fusion and quest)
+        y_sensor_size = 10.598;          //mm
+        readout_time = 199.;               // ms in UQS
+    }
+    else if(options["Camera_type"]== "Quest2")
+    {
+        x_pix = 4096;
+        optcounts_per_photon = 4.49;
+        y_sensor_size = 10.598;         //ms
+        readout_time = 39.;               // ms in UQS
+    }
+
     double y_dim=stod(options["y_dim"]);
-    double demag=y_dim/stod(options["sensor_size"]);
+    double x_dim=stod(options["x_dim"]);
+    double demag=y_dim/y_sensor_size;
     double aperture=stod(options["camera_aperture"]);
     omega=1./pow(4.*(demag+1)*aperture,2);
+
+    //Check if dimension imaged and pixel ratio matches
+    double testvalue = (x_dim/y_dim) - (static_cast<double>(x_pix)/static_cast<double>(y_pix));
+    if(testvalue>1e-1)
+    {
+        cerr<<"You are using a Quest image dimension with a Fusion simulation! Digitization FAILED!\n";
+        exit(0);
+    }
+    else if(testvalue<-1e-1)
+    {
+            cerr<<"You are using a Fusion image dimension with a Quest simulation! Digitization FAILED!\n";
+            exit(0);
+    }
+
+
+    num_threads=stoi(options["Parallel_threads"]);  //use tbb::info::default_concurrency(); to get all of the available cores
 	
     //Code execution
-    int run_count = 1;
+    int run_count = stoi(options["start_run_number"]);
     auto t0 = std::chrono::steady_clock::now();
     
     if(options["fixed_seed"]=="True" || options["fixed_seed"]=="true") gRandom->SetSeed(10);
@@ -327,9 +375,7 @@ int main(int argc, char** argv)
                                    fnameoutfolder.c_str(),
                                    partnum);
             }
-            
-            
-            
+                        
             
             auto outfile = shared_ptr<TFile> {TFile::Open(fileoutname.c_str(),
                                                           "RECREATE") };
@@ -459,15 +505,36 @@ int main(int argc, char** argv)
                 cout<<"Opening "<<vignfilename<<"..."<<endl;
                 auto VignFile = unique_ptr<TFile> {TFile::Open(vignfilename.c_str())};
                 
-                VignMap = (*(TH2F*)VignFile->Get("normmap_lime"));
+                VignMap = (*(TH2F*)VignFile->Get("normmap"));
                 
                 VignMap.Smooth();
                 
                 VignFile->Close();
+
+                int x_vign=VignMap.GetNbinsX();
+                int y_vign=VignMap.GetNbinsY();
+
+                if(x_vign!=y_vign)
+                {
+                    if(x_pix==y_pix)
+                    {
+                        cerr<<"You are using a Quest vignette map with a Fusion simulation! Digitization FAILED!\n";
+                        exit(0);
+                    }
+                }
+                else
+                {
+                    if(x_pix!=y_pix)
+                    {
+                        cerr<<"You are using a Fusion vignette map with a Quest simulation! Digitization FAILED!\n";
+                        exit(0);
+                    }
+
+                }
             }
             
             //DEBUG
-            //cout<<"DEBUG: "<<VignMap->GetBinContent(0,0)<<endl;
+            //cout<<"DEBUG: "<<VignMap.GetBinContent(100,100)<<endl;
             
             for(int entry=0; entry<totev; entry++) {  // RUNNING ON ENTRIES
                 
@@ -552,21 +619,22 @@ int main(int argc, char** argv)
                 py    = 0;
                 pz    = 0;
                 nhits_og = numhits;
-                
-                
-                vector<vector<int>> background(stoi(options["x_pix"]),
-                                               vector<int>(stoi(options["x_pix"]), 0));
+
+
+                vector<vector<int>> background(x_pix,
+                                               vector<int>(y_pix, 0));
+                                               
                 AddBckg(options, background);
                 
                 if (energy < stod(options["ion_pot"])){
                     energy = 0;
                     TH2I final_image(Form("pic_run%d_ev%d", run_count, entry), "",
-                                     stoi(options["x_pix"]), -0.5, stoi(options["x_pix"]) -0.5,
-                                     stoi(options["y_pix"]), -0.5, stoi(options["y_pix"]) -0.5);
+                                     x_pix, -0.5, x_pix -0.5,
+                                     y_pix, -0.5, y_pix -0.5);
                     
                     for(unsigned int xx =0; xx < background.size(); xx++) {
                         for(unsigned int yy =0; yy < background[0].size(); yy++) {
-                            final_image.SetBinContent(yy, xx, background[xx][yy]);
+                            final_image.SetBinContent(xx+1, yy+1, background[xx][yy]);
                         }
                     }
                     
@@ -661,42 +729,42 @@ int main(int argc, char** argv)
                 //cout<<"proj_track_2D = "<<Form("%.10f", proj_track_2D)<<endl;
                 
                 
-                x_vertex = (x_hits_tr[0] + 0.5 * stod(options["x_dim"]) )*stod(options["x_pix"])/stod(options["x_dim"]); //in pixels
-                y_vertex = (y_hits_tr[0] + 0.5 * stod(options["y_dim"]) )*stod(options["y_pix"])/stod(options["y_dim"]); //in pixels
-                z_vertex = abs(z_hits_tr[0]-stod(options["z_gem"])); //distance from GEMs in mm
+                x_vertex = (x_hits_tr[0] + 0.5 * stod(options["x_dim"]) )*static_cast<double>(x_pix)/stod(options["x_dim"]); //in pixels
+                y_vertex = (y_hits_tr[0] + 0.5 * stod(options["y_dim"]) )*static_cast<double>(y_pix)/stod(options["y_dim"]); //in pixels
+                z_vertex = (z_hits_tr[0]+stod(options["z_extra"])); //distance from GEMs in mm
                 // DEBUG
                 //cout<<"x_vertex = "<<x_vertex<<" ### y_vertex = "<<y_vertex<<" ### z_vertex = "<<z_vertex<<endl;
                 
-                x_vertex_end = (x_hits_tr[numhits-1] + 0.5 * stod(options["x_dim"])) * stod(options["x_pix"]) / stod(options["x_dim"]); //in pixels
-                y_vertex_end = (y_hits_tr[numhits-1] + 0.5 * stod(options["y_dim"])) * stod(options["y_pix"]) / stod(options["y_dim"]); //in pixels
-                z_vertex_end = abs(z_hits_tr[numhits-1]-stod(options["z_gem"])); //distance from GEMs in mm
+                x_vertex_end = (x_hits_tr[numhits-1] + 0.5 * stod(options["x_dim"])) * static_cast<double>(x_pix) / stod(options["x_dim"]); //in pixels
+                y_vertex_end = (y_hits_tr[numhits-1] + 0.5 * stod(options["y_dim"])) * static_cast<double>(y_pix) / stod(options["y_dim"]); //in pixels
+                z_vertex_end = (z_hits_tr[numhits-1]+stod(options["z_extra"])); //distance from GEMs in mm
                 //DEBUG
                 //cout<<"x_vertex_end = "<<x_vertex_end<<" ### y_vertex_end = "<<y_vertex_end<<" ### z_vertex_end = "<<z_vertex_end<<endl;
                 
-                x_min = (*min_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * stod(options["x_dim"])) * stod(options["x_pix"]) / stod(options["x_dim"]);
-                x_max = (*max_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * stod(options["x_dim"])) * stod(options["x_pix"]) / stod(options["x_dim"]);
-                y_min = (*min_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * stod(options["y_pix"]) / stod(options["y_dim"]);
-                y_max = (*max_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * stod(options["y_pix"]) / stod(options["y_dim"]);
-                z_min = min(abs(*max_element(z_hits_tr.begin(),
-                                             z_hits_tr.end()) - stod(options["z_gem"])),
-                            abs(*min_element(z_hits_tr.begin(),
-                                             z_hits_tr.end()) - stod(options["z_gem"])));
-                z_max = max(abs(*max_element(z_hits_tr.begin(),
-                                             z_hits_tr.end()) - stod(options["z_gem"])),
-                            abs(*min_element(z_hits_tr.begin(),
-                                             z_hits_tr.end()) - stod(options["z_gem"])));
+                x_min = (*min_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * stod(options["x_dim"])) * static_cast<double>(x_pix) / stod(options["x_dim"]);
+                x_max = (*max_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * stod(options["x_dim"])) * static_cast<double>(x_pix) / stod(options["x_dim"]);
+                y_min = (*min_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * static_cast<double>(y_pix) / stod(options["y_dim"]);
+                y_max = (*max_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * static_cast<double>(y_pix) / stod(options["y_dim"]);
+                z_min = min((*max_element(z_hits_tr.begin(),
+                                             z_hits_tr.end()) + stod(options["z_extra"])),
+                            (*min_element(z_hits_tr.begin(),
+                                             z_hits_tr.end()) + stod(options["z_extra"])));
+                z_max = max((*max_element(z_hits_tr.begin(),
+                                             z_hits_tr.end()) + stod(options["z_extra"])),
+                            (*min_element(z_hits_tr.begin(),
+                                             z_hits_tr.end()) + stod(options["z_extra"])));
                 //DEBUG
                 //cout<<" x_min = "<<x_min<<" x_max = "<<x_max<<" y_min = "<<y_min<<" y_max = "<<y_max<<" z_min = "<<z_min<<" z_max = "<<z_max<<endl;
                 
                 
                 //CUT TRACKS due to exposure of camera
-                double randcut = gRandom->Uniform(stod(options["exposure_time"])+stod(options["readout_time"]));
+                double randcut = gRandom->Uniform(stod(options["exposure_time"])+readout_time);
                 //randcut = 390.0;
                 
                 if (options["exposure_time_effect"] == "True") {
-                    if (randcut<stod(options["readout_time"])) {
+                    if (randcut<readout_time) {
                         
-                        double y_cut_tmp = stod(options["y_dim"]) * (0.5 - randcut/stod(options["readout_time"]))-3.;
+                        double y_cut_tmp = stod(options["y_dim"]) * (0.5 - randcut/readout_time)-3.;
                         
                         // Removing elements from x_hits_tr
                         x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
@@ -716,7 +784,7 @@ int main(int argc, char** argv)
                             return y < y_cut_tmp;
                         }), y_hits_tr.end());
                         
-                        row_cut = stoi(options["y_pix"]) - (int)(randcut * stod(options["y_pix"]) / stod(options["readout_time"]));
+                        row_cut = y_pix - (int)(randcut * static_cast<double>(y_pix) / readout_time);
                         
                         //DEBUG
                         //cout<<"y_cut_tmp = "<<y_cut_tmp<<endl;
@@ -725,7 +793,7 @@ int main(int argc, char** argv)
                         //    <<z_hits_tr.size()<<","<<energy_hits.size()<<"]"<<endl;
                         
                     } else if (randcut>stod(options["exposure_time"])) {
-                        double y_cut_tmp = stod(options["y_dim"]) * (0.5 - (randcut - stod(options["exposure_time"])) / stod(options["readout_time"]))-3.;
+                        double y_cut_tmp = stod(options["y_dim"]) * (0.5 - (randcut - stod(options["exposure_time"])) / readout_time)+3.;
                         
                         // Removing elements from x_hits_tr
                         x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
@@ -745,7 +813,7 @@ int main(int argc, char** argv)
                             return y > y_cut_tmp;
                         }), y_hits_tr.end());
                         
-                        row_cut = stoi(options["y_pix"]) - (int)((randcut-stod(options["readout_time"])) * stod(options["y_pix"]) / stod(options["readout_time"]));
+                        row_cut = y_pix - (int)((randcut-stod(options["exposure_time"])) * static_cast<double>(y_pix) / readout_time);
                         
                         //DEBUG
                         //cout<<"y_cut_tmp = "<<y_cut_tmp<<endl;
@@ -758,12 +826,12 @@ int main(int argc, char** argv)
                         cut_energy = 0;
                         cout<<"The track was completely cut"<<endl;
                         TH2I final_image(Form("pic_run%d_ev%d", run_count, entry), "",
-                                         stoi(options["x_pix"]), -0.5, stoi(options["x_pix"]) -0.5,
-                                         stoi(options["y_pix"]), -0.5, stoi(options["y_pix"]) -0.5);
+                                         x_pix, -0.5, x_pix -0.5,
+                                         y_pix, -0.5, y_pix -0.5);
                         
                         for(unsigned int xx =0; xx < background.size(); xx++) {
                             for(unsigned int yy =0; yy < background[0].size(); yy++) {
-                                final_image.SetBinContent(yy, xx, background[xx][yy]);
+                                final_image.SetBinContent(xx+1, yy+1, background[xx][yy]);
                             }
                         }
                         
@@ -775,8 +843,8 @@ int main(int argc, char** argv)
                     }
                 }
                 
-                vector<vector<double>> array2d_Nph(stoi(options["y_pix"]),
-                                                   vector<double>(stoi(options["x_pix"]), 0.0));
+                vector<vector<double>> array2d_Nph(x_pix,
+                                                   vector<double>(y_pix, 0.0));
                 
                 auto ta = std::chrono::steady_clock::now();
                 // with saturation
@@ -810,14 +878,14 @@ int main(int argc, char** argv)
                 
                 if(options["Vignetting"]=="True") {
                     TrackVignetting(array2d_Nph,
-                                    stoi(options["y_pix"]),
-                                    stoi(options["x_pix"]),
+                                    x_pix,
+                                    y_pix,
                                     VignMap);
                 }
                 
                 
                 if (options["exposure_time_effect"]=="True") { //cut the track post-smearing
-                    if (randcut<stod(options["readout_time"])) {
+                    if (randcut<readout_time) {
                         for(unsigned int xx=0; xx < array2d_Nph.size(); xx++) {
                             for(int yy=0; yy < row_cut; yy++) {
                                 array2d_Nph[xx][yy] = 0.0;
@@ -839,24 +907,23 @@ int main(int argc, char** argv)
                 }
                 
                 TH2I final_image(Form("pic_run%d_ev%d", run_count, entry), "",
-                                 stoi(options["x_pix"]), -0.5, stoi(options["x_pix"]) -0.5,
-                                 stoi(options["y_pix"]), -0.5, stoi(options["y_pix"]) -0.5);
+                                 x_pix, -0.5, x_pix -0.5,
+                                 y_pix, -0.5, y_pix -0.5);
                 
-                for(unsigned int xx =0; xx < array2d_Nph[0].size(); xx++) {
-                    for(unsigned int yy =0; yy < array2d_Nph.size(); yy++) {
-                        // DEBUG
-                        //int binc = (int)array2d_Nph[yy][array2d_Nph[0].size()-xx];
-                        int binc = background[xx][yy]+(int)array2d_Nph[yy][array2d_Nph[0].size()-xx];
-                        final_image.SetBinContent(yy, xx, binc);
+                for(unsigned int xx =0; xx < array2d_Nph.size(); xx++) {
+                    for(unsigned int yy =0; yy < array2d_Nph[0].size(); yy++) {
+                        
+                        int binc = background[xx][yy]+(int)array2d_Nph[xx][array2d_Nph[0].size()-1-yy];
+                        final_image.SetBinContent(xx+1, yy+1, binc);
                     }
                 }
                 
                 //Cut again the hits to save the effective length and energy which is visible in the final image,
                 //and compute the number of photons post-cut
                 if (options["exposure_time_effect"]=="True") {
-                    if (randcut<stod(options["readout_time"])) {
-                        double y_cut_tmp = stod(options["y_dim"]) * (0.5 - randcut/stod(options["readout_time"]));
-                        
+                    if (randcut<readout_time) {
+                        double y_cut_tmp = stod(options["y_dim"]) * (0.5 - randcut/readout_time);
+
                         // Removing elements from x_hits_tr
                         x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
                             return y_hits_tr[&x-&*x_hits_tr.begin()] < y_cut_tmp;
@@ -876,8 +943,8 @@ int main(int argc, char** argv)
                         }), y_hits_tr.end());
                         
                     } else if (randcut> stod(options["exposure_time"]) ) {
-                        double y_cut_tmp = stod(options["y_dim"]) * (0.5 - (randcut - stod(options["exposure_time"])) / stod(options["readout_time"]));
-                        
+                        double y_cut_tmp = stod(options["y_dim"]) * (0.5 - (randcut - stod(options["exposure_time"])) / readout_time);
+
                         // Removing elements from x_hits_tr
                         x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
                             return y_hits_tr[&x-&*x_hits_tr.begin()] > y_cut_tmp;
@@ -905,12 +972,12 @@ int main(int argc, char** argv)
                         cout<<"The track was completely cut after smearing"<<endl;
                         
                         TH2I final_image_cut(Form("pic_run%d_ev%d", run_count, entry), "",
-                                         stoi(options["x_pix"]), -0.5, stoi(options["x_pix"]) -0.5,
-                                         stoi(options["y_pix"]), -0.5, stoi(options["y_pix"]) -0.5);
+                                         x_pix, -0.5, x_pix -0.5,
+                                         y_pix, -0.5, y_pix -0.5);
                         
                         for(unsigned int xx =0; xx < background.size(); xx++) {
                             for(unsigned int yy =0; yy < background[0].size(); yy++) {
-                                final_image_cut.SetBinContent(yy, xx, background[xx][yy]);
+                                final_image_cut.SetBinContent(xx+1, yy+1, background[xx][yy]);
                             }
                         }
                         
@@ -935,18 +1002,18 @@ int main(int argc, char** argv)
                 //cout<<"proj_track_2D_cut = "<<Form("%.10f", proj_track_2D_cut)<<endl;
                 
                 
-                x_min_cut = (*min_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * stod(options["x_dim"])) * stod(options["x_pix"]) / stod(options["x_dim"]);
-                x_max_cut = (*max_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * stod(options["x_dim"])) * stod(options["x_pix"]) / stod(options["x_dim"]);
-                y_min_cut = (*min_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * stod(options["y_pix"]) / stod(options["y_dim"]);
-                y_max_cut = (*max_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * stod(options["y_pix"]) / stod(options["y_dim"]);
-                z_min_cut = min(abs(*max_element(z_hits_tr.begin(),
-                                                 z_hits_tr.end()) - stod(options["z_gem"])),
-                                abs(*min_element(z_hits_tr.begin(),
-                                                 z_hits_tr.end()) - stod(options["z_gem"])));
-                z_max_cut = max(abs(*max_element(z_hits_tr.begin(),
-                                                 z_hits_tr.end()) - stod(options["z_gem"])),
-                                abs(*min_element(z_hits_tr.begin(),
-                                                 z_hits_tr.end()) - stod(options["z_gem"])));
+                x_min_cut = (*min_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * stod(options["x_dim"])) * static_cast<double>(x_pix) / stod(options["x_dim"]);
+                x_max_cut = (*max_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * stod(options["x_dim"])) * static_cast<double>(x_pix) / stod(options["x_dim"]);
+                y_min_cut = (*min_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * static_cast<double>(y_pix) / stod(options["y_dim"]);
+                y_max_cut = (*max_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * stod(options["y_dim"])) * static_cast<double>(y_pix) / stod(options["y_dim"]);
+                z_min_cut = min((*max_element(z_hits_tr.begin(),
+                                                 z_hits_tr.end()) + stod(options["z_extra"])),
+                                (*min_element(z_hits_tr.begin(),
+                                                 z_hits_tr.end()) + stod(options["z_extra"])));
+                z_max_cut = max((*max_element(z_hits_tr.begin(),
+                                                 z_hits_tr.end()) + stod(options["z_extra"])),
+                                (*min_element(z_hits_tr.begin(),
+                                                 z_hits_tr.end()) + stod(options["z_extra"])));
                 //DEBUG
                 //cout<<" x_min_cut = "<<x_min_cut<<" x_max_cut = "<<x_max_cut<<" y_min_cut = "<<y_minv<<" y_max_cut = "<<y_max_cut<<" z_min_cut = "<<z_min_cut<<" z_max_cut = "<<z_max_cut<<endl;
                 
@@ -1139,8 +1206,8 @@ vector<double> NelGEM2(const vector<double>& energyDep, const vector<double>& z_
     transform(energyDep.begin(),energyDep.end(),back_inserter(n_ioniz_el_ini), [&] (double a) { return a/opt_pot;});
     
     vector<double> drift_l;
-    int opt_gem=stod(options["z_gem"]);
-    transform(z_hit.begin(),z_hit.end(),back_inserter(drift_l), [&] (double a) { return abs(a-opt_gem);});
+    int opt_gem=stod(options["z_extra"]);
+    transform(z_hit.begin(),z_hit.end(),back_inserter(drift_l), [&] (double a) { return a+opt_gem;});
     
     vector<double> n_ioniz_el_mean(n_ioniz_el_ini.size(), 0.0);
     
@@ -1175,7 +1242,7 @@ void SaveValues(map<string,string>& options, shared_ptr<TFile>& outfile)
         if(key!="tag"       && key !="Vig_Map" &&
            key!="bckg_path" && key !="ped_cloud_dir" &&
            key!="noiserun"  && key !="bckg_name" &&
-           key!="NR_list"
+           key!="NR_list"   && key !="Camera_type"
            )
         {
             TH1F h(string(key).c_str(),"",1,0,1);
@@ -1266,15 +1333,36 @@ void AddBckg(map<string,string>& options, vector<vector<int>>& background) {
         
         cout<<"Using pic # "<<pic_index<<" out of "<<flength<<" as a pedestal..."<<endl;
         TH2I* pic = fin->Get<TH2I>(Form("pic_%d", pic_index));
-        
-        for(int i = 0; i<pic->GetNbinsX()-1; i++) {
-            for (int j =0; j<pic->GetNbinsY()-1; j++) {
-                background[i][j] = pic->GetBinContent(j, i);
+
+        int x_ped=pic->GetNbinsX();
+        int y_ped=pic->GetNbinsY();
+        //Check pedestal and simulation have same camera settings
+        if(x_ped!=y_ped)
+        {
+            if(x_pix==y_pix)
+            {
+                cerr<<"You are using a Quest pedestal map with a Fusion simulation! Digitization FAILED!\n";
+                exit(0);
+            }
+        }
+        else
+        {
+            if(x_pix!=y_pix)
+            {
+                cerr<<"You are using a Fusion pedestal map with a Quest simulation! Digitization FAILED!\n";
+                exit(0);
+            }
+
+        }
+
+
+        for(int i = 0; i<pic->GetNbinsX(); i++) {
+            for (int j =0; j<pic->GetNbinsY(); j++) {
+                background[i][j] = pic->GetBinContent(i+1,j+1);
             }
         }
         //throw runtime_error("DEBUG");
     }
-    
     return;
 }
 
@@ -1363,14 +1451,15 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
     if (x_hits_tr.size() == 0) return;
     // if there are electrons on GEM3, apply saturation effect
     else {
-        double OFF = 10.;
+        double OFF = 15;
+        double OFFz = 10.;
 
         double xmin = (*min_element(x_hits_tr.begin(), x_hits_tr.end()))-OFF;
         double xmax = (*max_element(x_hits_tr.begin(), x_hits_tr.end()))+OFF;
         double ymin = (*min_element(y_hits_tr.begin(), y_hits_tr.end()))-OFF;
         double ymax = (*max_element(y_hits_tr.begin(), y_hits_tr.end()))+OFF;
-        double zmin = (*min_element(z_hits_tr.begin(), z_hits_tr.end()))-OFF;
-        double zmax = (*max_element(z_hits_tr.begin(), z_hits_tr.end()))+OFF;
+        double zmin = (*min_element(z_hits_tr.begin(), z_hits_tr.end()))-OFFz;
+        double zmax = (*max_element(z_hits_tr.begin(), z_hits_tr.end()))+OFFz;
         
         double deltaX = abs(xmax-xmin);
         double deltaY = abs(ymax-ymin);
@@ -1378,11 +1467,8 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         // FIXME: create a function for the saturation loop
         // FIXME: find best value of maxvolume. 1e8 might not me the best one
         long int max_3Dhisto_volume=(long int)5e+7;  // (volume in number of voxels) that's around 0.5*1.6 GB of RAM
-        
+
         int xy_vox_scale = stoi(options["xy_vox_scale"]);
-        
-        int x_pix = stoi(options["x_pix"]);
-        int y_pix = stoi(options["y_pix"]);
         
         double xbin_dim = stod(options["x_dim"]) / x_pix / xy_vox_scale;
         double ybin_dim = stod(options["y_dim"]) / y_pix / xy_vox_scale;
@@ -1408,7 +1494,6 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         double optA                 = stod(options["A"]);
         double optbeta              = stod(options["beta"]);
         double optphotons_per_el    = stod(options["photons_per_el"]);
-        double optcounts_per_photon = stod(options["counts_per_photon"]);
 
         //Timing and debug variables
         long int size_tot=0;
@@ -1454,8 +1539,6 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                     auto startcriti = std::chrono::steady_clock::now();
                     // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
                     //Parallel version
-                    // Get the default number of threads
-                    int num_threads = 8;    //use tbb::info::default_concurrency(); to get all of them
                     //Types of Mutex: spin -> unfair, unscalable (better for locking things that require little time)
                     //queue ->> fair, scalable
                     //tbb::queuing_mutex myMutex;
@@ -1509,7 +1592,6 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                     int zz = key % N ;
                     int yy = ((key - zz) / N) % M;
                     int xx = (key - yy * N - zz) / N / M;
-                    
                     // optbeta is multiplied by factors to normalize on volume chosen
                     hout[xx][yy]+=Nph_saturation(val, optA, optbeta*xy_vox_scale*xy_vox_scale*0.1/zbin_dim);
                 }
@@ -1530,8 +1612,6 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                 
                 auto startcriti = std::chrono::steady_clock::now();
                 //Parallel version
-                // Get the default number of threads
-                int num_threads = 8;    //use tbb::info::default_concurrency(); to get all of them
                 //Types of Mutex: spin -> unfair, unscalable (better for locking things that require little time)
                 //queue ->> fair, scalable
                 //tbb::queuing_mutex myMutex;
@@ -1585,7 +1665,6 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                     int zz = key % N ;
                     int yy = ((key - zz) / N) % M;
                     int xx = (key - yy * N - zz) / N / M;
-                    
                     // optbeta is multiplied by factors to normalize on volume chosen
                     hout[xx][yy]+=Nph_saturation(val, optA, optbeta*xy_vox_scale*xy_vox_scale*0.1/zbin_dim);
                 }
@@ -1685,8 +1764,6 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                             for(int zz=0; zz<z_n_bin-1; zz++){
                                 if(hc[xx][yy][zz] != 0.) {
                                     not_empty++;
-                                    
-                                    
                                     // optbeta is multiplied by factors to normalize on volume chosen
                                     hout[xx][yy]+=Nph_saturation(hc[xx][yy][zz], optA, optbeta*xy_vox_scale*xy_vox_scale*0.1/zbin_dim);
                                 }
@@ -1746,7 +1823,6 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                             for(int zz=0; zz<z_n_bin-1; zz++){
                                 if(hc[xx][yy][zz] != 0.) {
                                     not_empty++;
-                                    
                                     // optbeta is multiplied by factors to normalize on volume chosen
                                     hout[xx][yy]+=Nph_saturation(hc[xx][yy][zz], optA, optbeta*xy_vox_scale*xy_vox_scale*0.1/zbin_dim);
                                 }
@@ -1774,8 +1850,7 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
                                         optphotons_per_el *
                                         optcounts_per_photon);
             });
-        });
-        
+        });       
         
         // Padding
         // FIXME: Write a function padding()
@@ -1789,19 +1864,16 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         //        });
         //
         //cout<<"INT = "<<sommatotale<<endl;
-        
+
         int x_center_cloud=(int)round(((xmax+xmin)/2.)/xbin_dim);
         int y_center_cloud=(int)round(((ymax+ymin)/2.)/ybin_dim);
-        
+
         //DEBUG
         //cout<<"cc   = ("<<x_center_cloud<<","<<y_center_cloud<<")"<<endl;
-        
-        //cout<<"x_center_cloud "<<x_center_cloud<<endl;
-        //cout<<"y_center_cloud "<<y_center_cloud<<endl;
         vector<int> translation = {x_center_cloud, y_center_cloud};
         // Calculate the center position of the original array in the padded array
-        vector<int> center = {(int)(stod(options["x_pix"])*xy_vox_scale/2.)+translation[0],
-                              (int)(stod(options["y_pix"])*xy_vox_scale/2.)+translation[1]
+        vector<int> center = {(int)(static_cast<double>(x_pix)*xy_vox_scale/2.)+translation[0],
+                              (int)(static_cast<double>(y_pix)*xy_vox_scale/2.)+translation[1]
                              };
                              
         // DEBUG
@@ -1810,14 +1882,10 @@ void compute_cmos_with_saturation(vector<double>& x_hits_tr,
         // cout<<"Center: "<<center[0]<<", "<<center[1]<<endl;
         int x_start = max(0, center[0] -    (int)hout.size()/2);
         int y_start = max(0, center[1] - (int)hout[0].size()/2);
-        int x_end   = min(stoi(options["x_pix"])*xy_vox_scale, x_start + (int)hout.size());
-        int y_end   = min(stoi(options["y_pix"])*xy_vox_scale, y_start + (int)hout[0].size());
-        
-        // DEBUG
-        //cout<<"start = ("<<x_start<<","<<y_start<<")"<<endl;
-        //cout<<"end   = ("<<x_end  <<","<<  y_end<<")"<<endl;
-        
+        int x_end   = min(x_pix*xy_vox_scale, x_start + (int)hout.size());
+        int y_end   = min(y_pix*xy_vox_scale, y_start + (int)hout[0].size());
         // cout<<"PADDING ["<<x_start<<":"<<x_end<<","<<y_start<<":"<<y_end<<"]"<<endl;
+        
         for(int xx=x_start; xx<x_end; xx++){
             for(int yy=y_start; yy<y_end; yy++){
                 array2d_Nph[xx/xy_vox_scale][yy/xy_vox_scale]+=hout[xx-x_start][yy-y_start];
@@ -1835,8 +1903,8 @@ void compute_cmos_without_saturation(vector<double>& x_hits_tr,
                                      map<string,string>& options,
                                      vector<vector<double>>& array2d_Nph) {
     
-    vector<vector<double>> signal(stoi(options["x_pix"]),
-                                  vector<double>(stoi(options["y_pix"]), 0.0));
+    vector<vector<double>> signal(x_pix,
+                                  vector<double>(y_pix, 0.0));
     
     vector<float> S2D_x;
     vector<float> S2D_y;
@@ -1855,9 +1923,9 @@ void compute_cmos_without_saturation(vector<double>& x_hits_tr,
     iota(indices.begin(), indices.end(), 0);
     
     double optx_dim = stod(options["x_dim"]);
-    double optx_pix = stod(options["x_pix"]);
+    double optx_pix = static_cast<double>(x_pix);
     double opty_dim = stod(options["y_dim"]);
-    double opty_pix = stod(options["y_pix"]);
+    double opty_pix = static_cast<double>(y_pix);
     
     // THIS IS THE COMPUTATIONALLY EXPENSIVE PART
     for_each(indices.begin(), indices.end(), [&](int ihit) {
@@ -1896,8 +1964,8 @@ void cloud_smearing3D(vector<double>& x_hits_tr,
     //}
     
     vector<double> dz;
-    int opt_gem=stod(options["z_gem"]);
-    transform(z_hits_tr.begin(),z_hits_tr.end(),back_inserter(dz), [&] (double a) { return abs(a-opt_gem);});
+    int opt_gem=stod(options["z_extra"]);
+    transform(z_hits_tr.begin(),z_hits_tr.end(),back_inserter(dz), [&] (double a) { return a+opt_gem;});
 
     vector<double> sigma_x = compute_sigma(stod(options["diff_const_sigma0T"]), stod(options["diff_coeff_T"]), dz);
     vector<double> sigma_y = compute_sigma(stod(options["diff_const_sigma0T"]), stod(options["diff_coeff_T"]), dz);
@@ -1930,7 +1998,6 @@ void ph_smearing2D(vector<double>& x_hits_tr,
     vector<double> nel = NelGEM2(energy_hits, z_hits_tr, options);
     
     double optphotons_per_el    = stod(options["photons_per_el"]);
-    double optcounts_per_photon = stod(options["counts_per_photon"]);
     double optA                 = stod(options["A"]);
     // Photons in GEM3 (the factor A is added to be able to compare saturated and non-saturated results)
     vector<double> nph;
@@ -1939,8 +2006,8 @@ void ph_smearing2D(vector<double>& x_hits_tr,
     });
     
     vector<double> dz;
-    int opt_gem=stod(options["z_gem"]);
-    transform(z_hits_tr.begin(),z_hits_tr.end(),back_inserter(dz), [&] (double a) { return abs(a-opt_gem);});
+    int opt_gem=stod(options["z_extra"]);
+    transform(z_hits_tr.begin(),z_hits_tr.end(),back_inserter(dz), [&] (double a) { return a+opt_gem;});
     
     vector<double> sigma_xy = compute_sigma(stod(options["diff_const_sigma0T"]), stod(options["diff_coeff_T"]), dz);
     
@@ -2012,8 +2079,6 @@ void smear_parallel(const vector<double>& x_axis_hit,const vector<double>& y_axi
     //This here is the slowest part
     auto startstep4 = std::chrono::steady_clock::now();
 
-    // Get the default number of threads
-    int num_threads = 8;    //use tbb::info::default_concurrency(); to get all of them
     tbb::spin_mutex myMutex;
     // Run the default parallelism
     tbb::task_arena arena(num_threads);
@@ -2051,7 +2116,6 @@ void smear_parallel(const vector<double>& x_axis_hit,const vector<double>& y_axi
     //std::chrono::duration<double> dur=endstep4-startstep4;
     //std::cout << "Slowest Time smear part " << dur.count() << " seconds" <<std::endl;
 
-
     return ;
 }
 
@@ -2083,8 +2147,8 @@ void TrackVignetting(vector<vector<double>>& arrTr, int xpix, int ypix, const TH
         for(int yy = 0; yy < ypix; yy++) {
             if(arrTr[xx][yy] != 0) {
                 arrTr[xx][yy]=round(arrTr[xx][yy] *
-                                    VignMap.GetBinContent(VignMap.GetXaxis()->FindBin(yy),
-                                                          VignMap.GetYaxis()->FindBin(xx)
+                                    VignMap.GetBinContent(VignMap.GetXaxis()->FindBin(xx),
+                                                          VignMap.GetYaxis()->FindBin(yy)
                                                           )
                                     );
             }

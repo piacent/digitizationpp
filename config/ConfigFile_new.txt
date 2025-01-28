@@ -1,73 +1,68 @@
 {
-##from https://arxiv.org/pdf/2007.00608.pdf
+# Detector physics
+## diffusion parameters from https://arxiv.org/pdf/2007.00608.pdf
 'diff_const_sigma0T'    : 0.1225,     # diffusion constant [mm]^2
 'diff_coeff_T'          : 0.013225,   # diffusion parameter [mm/sqrt(cm)]^2 for 1 kV
 'diff_const_sigma0L'    : 0.0676,     # diffusion constant [mm]^2
 'diff_coeff_L'          : 0.00978,    # diffusion parameter [mm/sqrt(cm)]^2 for 1 kV
+'ion_pot'               : 0.0350,    # ionization potential for He/CF4 60/40 [keV]
+'photons_per_el'        : 0.07,      # number of photons per electron produced in the avalanche
+'absorption_l'          : 1400.,     # absorption length in [mm]
 
-
+# Detector parameters
+'GEM1_HV'               : 420.,      # HV of GEM1
+'GEM2_HV'               : 420.,      # HV of GEM2
+'GEM3_HV'               : 420.,      # HV of GEM3
 'x_dim'			: 346,       # first dimension of the detector
 'y_dim'			: 346,       # second dimension of the detector
-'x_pix'			: 2304,      # number of pixels in the first dimension
-'y_pix'			: 2304,      # number of pixels in the second dimension
 
-'z_vox_dim'             : 0.1,       # z voxel size in [mm]
-'zcloud'		: 20,        # z dimension of the electron cloud in [mm]
-'x_vox_min'		: 950,       # x voxel min of the electron cloud (voxels in the GEM plane correspond to pixels)
-'x_vox_max'		: 1350,      # x voxel max of the electron cloud (voxels in the GEM plane correspond to pixels)
-'y_vox_min'		: 950,       # y voxel min of the electron cloud (voxels in the GEM plane correspond to pixels)
-'y_vox_max'		: 1350,      # y voxel max of the electron cloud (voxels in the GEM plane correspond to pixels)
-
-#FIXME
+# Geometry
 'x_offset'              : 0.,        # x offset [mm] (to center the image along x) 
 'y_offset'              : 0.,        # y offset [mm] (to center the image along y)
-'z_offset'              : -240.,     # z offset (along drift direction - corresponds to coordinate of the farthest point from the GEM)
-'z_gem'                 : 240.,        # GEM z coordinate [mm] (drift distance will be (position in simulation along drift)+(z_offset)-(z_gem) )
+'z_offset'              : 240.,     # z offset (along drift direction - term which changes coordinate from GEANT (0 is center of detector) to data reference frame (0 is GEM))
+'z_extra'               : 0.,        # Extra distance from GEM in z coordinate [mm] (drift distance will be (position in simulation along drift)+(z_offset)+(z_extra) )
+'randZ_range'           : 0.,        # Track z coordinate range [mm]. Tracks will be generated uniformly between 'z_hit+randZ_range/2' and 'z_hit-randZ_range/2'
+
+# Camera parameters
+'Camera_type'		: 'Fusion',   # Possibilities: Fusion, Quest1, Quest2
+'camera_aperture'       : 0.95,
+'exposure_time_effect'  : False,      # if True simulates the effect of tracks cut by the sensor being not fully exposed
+'exposure_time'         : 300,       # exposure time in milliseconds
+
+# Saturation parameters
+'saturation'            : True,      # if 'True' saturation effect is applied on GEM3    
+'xy_vox_scale'          : 1, # pixel size / xy voxel dimension (MUST be integer AND >= 1)
+'z_vox_dim'             : 0.1,       # z voxel size in [mm]
+'A'                     : 1.52,        # free parameter (total scale factor MC/data)
+'beta'                  : 1.0e-5,    # saturation parameter
+'z_vox_dim'             : 0.1,       # z voxel size in [mm]
+'zcloud'		: 20,        # z dimension of the electron cloud in [mm]
+
+# Background
+'bckg'                  : True,      # if 'True' background is added
 'tag'			: 'Data',    # Set 'Data' to download a real pedestal run 
 'noiserun'              : '58695;58702',      # pedestal runs to add as background separated by ';'
 'ped_cloud_dir'         : 'LNGS',    # directory inside the cloud bucket where the pedestal run is located
 'bckg_path'		: '../tmp/', # set path to pedestal run, or leave it black if you want to download it
-'bckg_name'     : 'mypeds.root', # set name of the .root file containing the pedestals
+'bckg_name'     	: 'mypeds.root', # set name of the .root file containing the pedestals
 'random_ped'            : -1, # if -1 then the pedestal is randomly extracted from the 'bckg_name' file, else put here which fixed event of the 'bckg_name' file you want to use
 'start_event'		: 0,         # index of the first event to digitize
 
+# Vignetting
+'Vignetting'		: True,      #Add vignetting effect according to the MAP
+'Vig_Map'		: 'vignette_runs03930to03932.root',
 
-'ion_pot'               : 0.0350,    # ionization potential for He/CF4 60/40 [keV]
-'GEM1_HV'               : 420.,      # HV of GEM1
-'GEM2_HV'               : 420.,      # HV of GEM2
-'GEM3_HV'               : 420.,      # HV of GEM3
-
-
-# saturation parameters
-'saturation'            : True,      # if 'True' saturation effect is applied on GEM3    
-'z_vox_dim'             : 0.1,       # z voxel size in [mm]
-'xy_vox_scale'          : 1,         # pixel size / xy voxel dimension (MUST be integer AND >= 1)
-'A'                     : 1.52,        # free parameter (total scale factor MC/data)
-'beta'                  : 1.0e-5,    # saturation parameter   
-
-# optical parameters
-'photons_per_el'        : 0.07,      # number of photons per electron produced in the avalanche
-'counts_per_photon'     : 2.,        # sensor conversion factor counts/photons
-'sensor_size'           : 14.976,    # sensor dimension [mm] ORCA Fusion
-'camera_aperture'       : 0.95,
-'exposure_time_effect'  : False,      # if True simulates the effect of tracks cut by the sensor being not fully exposed
-'exposure_time'         : 300,       # exposure time in milliseconds
-'readout_time'          : 184.4,     # readout time of the camera in ms (184.4ms for ultra quiet scan)
-
-'bckg'                  : True,      # if 'True' background is added
-'NR'                    : False,     # 'True' for NR and ER digitization, 'False' for only ER
+# Operative parameters
+'start_run_number'      : 1,	    # first number for outputfile: histograms_Run<start_run_number%5d>.root
+'NR'                    : True,     # 'True' for NR and ER digitization, 'False' for only ER
 'SRIM'                  : False,      # 'True' for SRIM NR simulations
 'NR_list'               : , #'NRlist_AmBeISO_LIME_neutrons_50cmPE_10cmCu_NOPb_10umStep', # Name of the SRIM MC NR_list file   
 'GEANT4isotopes'        : False,      # specify if you are digitizing tracks from radioactive isotope GEANT4 simulations
 'rootfiles'             : True,      # choose input type: True for G4 root iput, False for SRIM txt files
 'events'                : -1,         # number of events to be processed, -1 = all
 'donotremove'           : True,      # Remove or not the file from the tmp folder
-'fixed_seed'            : False,     # If 'True' the seed of random distributions is set to 0 (for debugging purposes)
+'fixed_seed'            : False,     # If 'True' the seed of random distributions is set to 10 (for debugging purposes)
 'WID'                   : 5,         # Integer parameter: the smaller WID is, the smaller the ram usage but the higher the time consumption
+'Parallel_threads'      : 8,         # Integer parameter: number of threads to use in parallel calculation
 
-'randZ_range'           : 0.,        # Track z coordinate range [mm]. Tracks will be generated uniformly between 'z_hit+randZ_range/2' and 'z_hit-randZ_range/2'
-'absorption_l'          : 1400.,     # absorption lenght in [mm]
-
-'Vignetting'		: True,      #Add vignetting effect according to the MAP
-'Vig_Map'		: 'vignette_runs03930to03932.root',
 }

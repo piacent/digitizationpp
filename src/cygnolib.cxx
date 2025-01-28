@@ -507,24 +507,28 @@ namespace cygnolib {
         }
     }
     
-    Picture daq_cam2pic(TMidasEvent &event, std::string cam_model) {
+    Picture daq_cam2pic(TMidasEvent &event) {
         int rows;
         int columns;
-        
-        if(cam_model=="fusion") {
-            rows = 2304;
-            columns = 2304;
-        } else {
-            throw std::invalid_argument("cygnolib::daq_cam2pic: invalid model '"+cam_model+"' for the camera.\n");
-        }
-        
-        Picture pic(rows, columns);
         
         std::string bname="CAM0";
         int bankLength = 0;
         int bankType = 0;
         void *pdata = 0;
         event.FindBank(bname.c_str(), &bankLength, &bankType, &pdata);
+        if(bankLength>5400000)
+        {//It is a QUEST
+            rows = 2304;
+            columns = 4096;
+        }
+        else
+        {//It is a Fusion (Flash not supported)
+            rows = 2304;
+            columns = 2304;
+        }
+
+        Picture pic(rows, columns);
+        
         uint16_t *pdatacast = (uint16_t *)pdata; //recast to bank type to increment
         std::vector<std::vector<uint16_t>> frame(rows, std::vector<uint16_t>(columns,0));
         for(int i=0; i<rows; i++) {
@@ -629,7 +633,7 @@ void cygnolib::joinMidasPedestals(std::vector<int> &pedruns, std::string ped_clo
                     std::cout<<"Processing image "<<progresscounter<<"...\r"<<std::flush;
                     progresscounter++;
 
-                    cygnolib::Picture pic=cygnolib::daq_cam2pic(event, "fusion");
+                    cygnolib::Picture pic=cygnolib::daq_cam2pic(event);
                     std::vector<std::vector<uint16_t>> vecpic = pic.GetFrame();
 
                     TH2I bkg_image(Form("pic_%d", counterpic), "",
@@ -638,7 +642,7 @@ void cygnolib::joinMidasPedestals(std::vector<int> &pedruns, std::string ped_clo
 
                     for(unsigned int i = 0; i<vecpic.size(); i++) {
                         for (unsigned int j =0; j<vecpic[0].size(); j++) {
-                            bkg_image.SetBinContent(j, i, vecpic[i][j]);
+                            bkg_image.SetBinContent(j+1, i+1, vecpic[i][j]);
                         }
                     }
                     bkg_image.Write();
