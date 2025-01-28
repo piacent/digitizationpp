@@ -209,9 +209,24 @@ int main(int argc, char** argv)
     }
 
     double y_dim=stod(options["y_dim"]);
+    double x_dim=stod(options["x_dim"]);
     double demag=y_dim/y_sensor_size;
     double aperture=stod(options["camera_aperture"]);
     omega=1./pow(4.*(demag+1)*aperture,2);
+
+    //Check if dimension imaged and pixel ratio matches
+    double testvalue = (x_dim/y_dim) - (static_cast<double>(x_pix)/static_cast<double>(y_pix));
+    if(testvalue>1e-1)
+    {
+        cerr<<"You are using a Quest image dimension with a Fusion simulation! Digitization FAILED!\n";
+        exit(0);
+    }
+    else if(testvalue<-1e-1)
+    {
+            cerr<<"You are using a Fusion image dimension with a Quest simulation! Digitization FAILED!\n";
+            exit(0);
+    }
+
 
     num_threads=stoi(options["Parallel_threads"]);  //use tbb::info::default_concurrency(); to get all of the available cores
 	
