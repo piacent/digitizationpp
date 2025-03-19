@@ -4,6 +4,9 @@
 
 Digitization code in C++
 
+## Usage on cygno-cloud
+Since image 2.4, the digitization code dependencies are already installed and just typing cygno_setup, sets all the variables required for digitization to work.
+
 ## Dependencies
 
 * ROOT [compiled with the C++17 or C++20 standard]
