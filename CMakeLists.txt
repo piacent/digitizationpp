@@ -23,6 +23,8 @@ else()
 endif()
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -no-pie")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -no-pie") 
 
 include(${ROOT_USE_FILE})
 include_directories(${ROOT_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR} ${OpenCV_INCLUDE_DIRS} $ENV{ROOTANASYS}/include)
