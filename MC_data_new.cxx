@@ -242,7 +242,7 @@ int main(int argc, char** argv)
     vector<float> theta_ini;
     vector<float> phi_ini;
     
-    if(! filesystem::exists(outfolder)){
+    if(! filesystem::exists(outfolder) && options["queue"]=="0"){
         //DEBUG
         cout<<"Creating oufolder..."<<
         system(("mkdir -p " + outfolder).c_str() );
@@ -316,11 +316,12 @@ int main(int argc, char** argv)
             auto delimFN = filename_tmp.find(".root");
             string basefilename   = filename_tmp.substr(0, delimFN);
             string fnameoutfolder = outfolder + "/" + basefilename;
-            if(! filesystem::exists(fnameoutfolder)){
+            if(! filesystem::exists(fnameoutfolder) && options["queue"]=="0"){
                 system(("mkdir -p " + fnameoutfolder).c_str() );
             }
             
             // standard: name of output file = histograms_RunRRRRR.root (R run number)
+            if(options["queue"]=="1") fnameoutfolder="./";
             string fileoutname= Form("%s/histograms_Run%05d.root",
                                      fnameoutfolder.c_str(),
                                      run_count);
@@ -348,14 +349,14 @@ int main(int argc, char** argv)
                 auto part = basefilename.substr(delimBFN+4, basefilename.size() - delimBFN - 4);
                       
                 if(filename.find("part")!= string::npos) {
-                    fileoutname = Form("%s/histogram_Runs%05d%02d.root",
+                    fileoutname = Form("%s/histograms_Run%05d%02d.root",
                                        fnameoutfolder.c_str(),
                                        stoi(isot_numb),
                                        stoi(part)
                                        );
                     isot_numb = Form("%05d%02d", stoi(isot_numb), stoi(part));
                 } else {
-                    fileoutname = Form("%s/histogram_Runs%05d00.root",
+                    fileoutname = Form("%s/histograms_Run%05d00.root",
                                        fnameoutfolder.c_str(),
                                        stoi(isot_numb));
                     
@@ -371,7 +372,7 @@ int main(int argc, char** argv)
                 int newpart = (int)(stoi(options["start_event"])/500);
                 int oldpart = stoi(isot_numb);
                 int partnum = oldpart + newpart;
-                fileoutname = Form("%s/histograms_Run%07d.root",
+                fileoutname = Form("%s/histograms_Run%05d.root",
                                    fnameoutfolder.c_str(),
                                    partnum);
             }
