@@ -1178,20 +1178,20 @@ vector<double> NelGEM1(const vector<double>& N_ioniz_el) {
     
     vector<double> n_tot_el(N_ioniz_el.size(), 0);
     
-    if (N_ioniz_el.size() == 1) { // in case there is only one hit (very low energy)
+    //if (N_ioniz_el.size() == 1) { // in case there is only one hit (very low energy)
         //for(int j = 0; j<(int)N_ioniz_el[0]; j++) {
             //double nsec = gRandom->Exp(GEM1_gain) * extraction_eff_GEM1;
             //n_tot_el[0] += nsec;
-        n_tot_el[0] = N_ioniz_el[0];
+    //    n_tot_el[0] = N_ioniz_el[0];
         //}
-    } else {
-        for(unsigned int i = 0; i<N_ioniz_el.size(); i++) {
-            for(int j = 0; j<(int)round(N_ioniz_el[i]); j++) {
-                double nsec = gRandom->Exp(GEM1_gain) * extraction_eff_GEM1;
-                n_tot_el[i] += nsec;
-            }
+    //} else {
+    for(unsigned int i = 0; i<N_ioniz_el.size(); i++) {
+        for(int j = 0; j<(int)round(N_ioniz_el[i]); j++) {
+            double nsec = gRandom->Exp(GEM1_gain) * extraction_eff_GEM1;
+            n_tot_el[i] += nsec;
         }
     }
+    //}
     //DEBUG
     //for(unsigned int i=0; i<n_tot_el.size(); i++) {
     //    cout<<n_tot_el[i]<<"\n";
