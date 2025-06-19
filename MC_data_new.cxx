@@ -125,6 +125,10 @@ int main(int argc, char** argv)
 {
     string outfolder;
     string infolder;
+    
+    int start_index = -1;
+    int end_index   = -1;
+    int run_count = 1;
    
     if(argc<2) {cerr<<"No Configfile given!!\nSuggested use: ./progname.exe Configfile -I inputdir -O outputdir"; exit(EXIT_FAILURE);}
     string nome=argv[1];
@@ -144,15 +148,46 @@ int main(int argc, char** argv)
     }
     else
     {
-        if(argc!=6) {cerr<<"Wrong parameter inputs given!!\nCorrect use: ./progname.exe Configfile -I inputdir -O outputdir"; exit(EXIT_FAILURE);}
+        if(argc!=12) {cerr<<"Wrong parameter inputs given!!\nCorrect use: ./progname.exe Configfile -I inputdir -O outputdir"; exit(EXIT_FAILURE);}
         string parseop=argv[2];
         string parseop2=argv[4];
+        string parseop3=argv[6];
+        string parseop4=argv[8];
+        string parseop5=argv[10];
         //cout<< parseop << "   " << parseop2<< endl;
-        if(parseop!="-I" && parseop2!="-I") {cerr<<"Wrong options name!!\nSuggested use: ./progname.exe Configfile -I inputdir -O outputdir"; exit(EXIT_FAILURE);}
-        if(parseop!="-O" && parseop2!="-O") {cerr<<"Wrong options name!!\nSuggested use: ./progname.exe Configfile -I inputdir -O outputdir"; exit(EXIT_FAILURE);}
-	
-        if(parseop=="-I") {infolder=argv[3]; outfolder=argv[5];}
-        else {infolder=argv[5]; outfolder=argv[3];}
+        if(parseop!="-I" && parseop2!="-I" && parseop3!="-I" && parseop4!="-I" && parseop5!="-I") {
+            cerr<<"Wrong options name!!\nSuggested use: ./progname.exe Configfile -I inputdir -O outputdir";
+            exit(EXIT_FAILURE);
+        }
+        if(parseop!="-O" && parseop2!="-O" && parseop3!="-O" && parseop4!="-O" && parseop5!="-O") {
+            cerr<<"Wrong options name!!\nSuggested use: ./progname.exe Configfile -I inputdir -O outputdir";
+            exit(EXIT_FAILURE);
+        }
+        if(parseop!="-s" && parseop2!="-s" && parseop3!="-s" && parseop4!="-s" && parseop5!="-s") {
+            cerr<<"Wrong options name!!\nSuggested use: ./progname.exe Configfile -I inputdir -O outputdir";
+            exit(EXIT_FAILURE);
+        }
+        if(parseop!="-e" && parseop2!="-e" && parseop3!="-e" && parseop4!="-e" && parseop5!="-e") {
+            cerr<<"Wrong options name!!\nSuggested use: ./progname.exe Configfile -I inputdir -O outputdir";
+            exit(EXIT_FAILURE);
+        }
+        if(parseop!="-C" && parseop2!="-C" && parseop3!="-C" && parseop4!="-C" && parseop5!="-C") {
+            cerr<<"Wrong options name!!\nSuggested use: ./progname.exe Configfile -I inputdir -O outputdir";
+            exit(EXIT_FAILURE);
+        }
+        if(parseop=="-I" && parseop2=="-O" && parseop3=="-s" && parseop4=="-e" && parseop5=="-C") {
+            infolder=argv[3];
+            outfolder=argv[5];
+            start_index = stoi(argv[7]);
+            end_index   = stoi(argv[9]);
+            run_count   = stoi(argv[11]);
+        } else {
+            cerr<<"Wrong options order!!\nCorrect order: -I inputdir -O outputdir -s start_index -e end_index -C run_count\n";
+            cerr<<"Order given: "<<parseop<<" "<<parseop2<<" "<<parseop3<<" "<<parseop4<<" "<<parseop5<<" "<<"\n";
+            exit(EXIT_FAILURE);
+            //infolder=argv[5];
+            //outfolder=argv[3];
+        }
     }
 
     // DEBUG
@@ -183,7 +218,7 @@ int main(int argc, char** argv)
     omega=1./pow(4.*(demag+1)*aperture,2);
 	
     //Code execution
-    int run_count = 1;
+    //int run_count = 1;
     auto t0 = std::chrono::steady_clock::now();
     
     if(options["fixed_seed"]=="True" || options["fixed_seed"]=="true") gRandom->SetSeed(10);
@@ -508,7 +543,15 @@ int main(int argc, char** argv)
                     // started by a photon or an electron
                 }
 
-                if(entry <= 100 || entry > 200) continue;
+                if(start_index != -1 && end_index != -1) {
+                    if(entry <= start_index || entry > end_index) continue;
+                } else if (start_index != -1 && end_index == -1) {
+                    if(entry <= start_index) continue;
+                } else if (start_index == -1 && end_index != -1) {
+                    if(entry > end_index) continue;
+                }
+                
+                //if(entry > 100) continue;
                 if(options["NR"]=="False" && NR_flag==true ) continue;
                 if(options["SRIM"]=="True"  && ekin_particle>900) continue;     //not corrected for SRIM
                 
