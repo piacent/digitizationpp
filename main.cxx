@@ -38,23 +38,20 @@ int main(int argc, char** argv) {
     } else {
         // default fallback: current working directory + relative paths
         char cwd[PATH_MAX];
-        getcwd(cwd, sizeof(cwd));
+        char* ret = getcwd(cwd, sizeof(cwd));
+        if(!ret) {
+            cerr << "Failed to get current directory... exiting" << endl;
+            return EXIT_FAILURE;
+        }
         string base = std::filesystem::path(configFile).parent_path().string();
         inputDir = string(cwd) + "/" + base + "/../input/";
         outputDir = string(cwd) + "/" + base + "/../OutDir/";
     }
 
-    ConfigManager config;
-    if (!config.loadConfig(configFile)) {
-        cerr << "Failed to load configuration file: " << configFile << endl;
-        return EXIT_FAILURE;
-    }
-
-    // DEBUG
-    //config.printConfig();
+    
     
     try {
-        DigitizationRunner runner(config, inputDir, outputDir);
+        DigitizationRunner runner(configFile, inputDir, outputDir);
         runner.run();
     } catch (const std::exception& e) {
         cerr << "Error during digitization: " << e.what() << endl;

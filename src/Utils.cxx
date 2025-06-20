@@ -27,24 +27,24 @@ double angleBetween(const std::vector<double>& v1, const std::vector<double>& v2
 
 std::vector<double> crossProduct(const std::vector<double>& a, const std::vector<double>& b) {
     if (a.size() != 3 || b.size() != 3) throw std::invalid_argument("Both vectors must be 3D.");
-    return {
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0]
-    };
+    std::vector<double> result(3);
+    result[0] = a[1] * b[2] - a[2] * b[1];
+    result[1] = a[2] * b[0] - a[0] * b[2];
+    result[2] = a[0] * b[1] - a[1] * b[0];
+    return result;
 }
 
 std::vector<double> rotateByAngleAndAxis(const std::vector<double>& vec, double angle, const std::vector<double>& axis) {
     if (vec.size() != 3 || axis.size() != 3) throw std::invalid_argument("Both vectors must be 3D.");
-    
-    std::vector<double> cross = crossProduct(axis, vec);
-    double dot = std::inner_product(axis.begin(), axis.end(), vec.begin(), 0.0);
 
+    // v_rot = (costheta)v + (sintheta)(axis x v) + (1-cos(theta)) (axis dot v) axis
     std::vector<double> result(3);
-    for (int i = 0; i < 3; ++i) {
-        result[i] = vec[i] * cos(angle) +
-                    cross[i] * sin(angle) +
-                    axis[i] * dot * (1.0 - cos(angle));
+    
+    std::vector<double> axisXvec = crossProduct(axis, vec);
+    double axisDOTvec       = std::inner_product(axis.begin(), axis.end(), vec.begin(), 0.0);
+    
+    for(int i = 0; i < 3; i++) {
+        result[i] = std::cos(angle) * vec[i] + std::sin(angle) * axisXvec[i] + (1.-std::cos(angle))*axisDOTvec*axis[i];
     }
     return result;
 }
