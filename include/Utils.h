@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <filesystem>
+#include <algorithm>
 
 namespace Utils {
 
@@ -15,5 +16,6 @@ std::vector<double> crossProduct(const std::vector<double>& a, const std::vector
 std::vector<double> rotateByAngleAndAxis(const std::vector<double>& vec, double angle, const std::vector<double>& axis);
 
 double roundUpToEven(double value);
+std::vector<double> arange(double start, double stop, double step);
 
 }

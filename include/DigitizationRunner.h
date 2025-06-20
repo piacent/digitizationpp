@@ -39,7 +39,7 @@ private:
     std::string outputDir;
     int runCount=0;
 
-    int NMAX_EVENTS = 10;
+    int NMAX_EVENTS = 200;
     std::string SOURCE_DIR = "";
 
 };

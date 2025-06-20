@@ -1,4 +1,5 @@
 #include "DigitizationRunner.h"
+#include "TrackProcessor.h"
 #include "Globals.h"
 #include "Utils.h"
 #include <filesystem>
@@ -347,6 +348,9 @@ void DigitizationRunner::processRootFiles() {
     
     const string infolder  = Utils::resolvePath(inputDir);
     const string outfolder = Utils::resolvePath(outputDir);
+
+    // TrackProcessor initialization
+    TrackProcessor processTrack(config);
 
     // Probably not needed anymore
     vector<int> eventnumber;
@@ -860,232 +864,224 @@ void DigitizationRunner::processRootFiles() {
                     continue;
                 }
             }
-                /*
-                vector<vector<double>> array2d_Nph(x_pix,
-                                                   vector<double>(y_pix, 0.0));
                 
-                auto ta = std::chrono::steady_clock::now();
-                // with saturation
-                if(options["saturation"]=="True") {
-                    cout<<"Starting compute_cmos_with_saturation with size = "<<x_hits_tr.size()<<"..."<<endl;
-                    compute_cmos_with_saturation(x_hits_tr,
-                                                 y_hits_tr,
-                                                 z_hits_tr,
-                                                 energy_hits,
-                                                 options,
-                                                 array2d_Nph,
-                                                 energy,
-                                                 NR_flag
-                                                 );
-                } else {// no saturation
-                    compute_cmos_without_saturation(x_hits_tr,
+            vector<vector<double>> array2d_Nph(x_pix,
+                                                vector<double>(y_pix, 0.0));
+                
+            auto ta = std::chrono::steady_clock::now();
+            // with saturation
+            if(config.getBool("saturation")) {
+                cout<<"Starting compute_cmos_with_saturation with size = "<<x_hits_tr.size()<<"..."<<endl;
+                processTrack.computeWithSaturation(x_hits_tr,
                                                     y_hits_tr,
                                                     z_hits_tr,
                                                     energy_hits,
-                                                    options,
+                                                    energy,
+                                                    NR_flag,
                                                     array2d_Nph
                                                     );
-                }
+            } else {// no saturation
+                processTrack.computeWithoutSaturation(x_hits_tr,
+                                                    y_hits_tr,
+                                                    z_hits_tr,
+                                                    energy_hits,
+                                                    array2d_Nph
+                                                    );
+            }
                 
-                // Integral of the track - if opt.exposure_effect, it's computed anyway after the cut on the original hits (to save time we digitize only the part that will be visible)
-                N_photons = accumulate(array2d_Nph.cbegin(), array2d_Nph.cend(), 0, [](auto sum, const auto& row) {
+            // Integral of the track - if opt.exposure_effect, it's computed anyway after the cut on the original hits (to save time we digitize only the part that will be visible)
+            N_photons = accumulate(array2d_Nph.cbegin(), array2d_Nph.cend(), 0, [](auto sum, const auto& row) {
+                return accumulate(row.cbegin(), row.cend(), sum);
+            });
+            // DEBUG
+            cout<<"N_photons = "<<N_photons<<endl;
+                
+            if(config.getBool("Vignetting")) {
+                processTrack.TrackVignetting(array2d_Nph,
+                                            x_pix,
+                                            y_pix,
+                                            VignMap);
+            }
+                
+                
+            if (config.getBool("exposure_time_effect")) { //cut the track post-smearing
+                if (randcut<readout_time) {
+                    for(unsigned int xx=0; xx < array2d_Nph.size(); xx++) {
+                        for(int yy=0; yy < row_cut; yy++) {
+                            array2d_Nph[xx][yy] = 0.0;
+                        }
+                    }
+                } else if(randcut> config.getDouble("exposure_time") ) {
+                    for(unsigned int xx=0; xx < array2d_Nph.size(); xx++) {
+                        for(int yy=row_cut; yy < (int)array2d_Nph[0].size(); yy++) {
+                            array2d_Nph[xx][yy] = 0.0;
+                        }
+                    }
+                }
+                    
+                //integral after camera exposure cut
+                N_photons_cut = accumulate(array2d_Nph.cbegin(),
+                                            array2d_Nph.cend(), 0, [](auto sum, const auto& row) {
                     return accumulate(row.cbegin(), row.cend(), sum);
                 });
-                // DEBUG
-                cout<<"N_photons = "<<N_photons<<endl;
+            }
                 
-                if(options["Vignetting"]=="True") {
-                    TrackVignetting(array2d_Nph,
-                                    x_pix,
-                                    y_pix,
-                                    VignMap);
-                }
+            TH2I final_image(Form("pic_run%d_ev%d", runCount, entry), "",
+                                x_pix, -0.5, x_pix -0.5,
+                                y_pix, -0.5, y_pix -0.5);
                 
-                
-                if (options["exposure_time_effect"]=="True") { //cut the track post-smearing
-                    if (randcut<readout_time) {
-                        for(unsigned int xx=0; xx < array2d_Nph.size(); xx++) {
-                            for(int yy=0; yy < row_cut; yy++) {
-                                array2d_Nph[xx][yy] = 0.0;
-                            }
-                        }
-                    } else if(randcut> config.getDouble("exposure_time") ) {
-                        for(unsigned int xx=0; xx < array2d_Nph.size(); xx++) {
-                            for(int yy=row_cut; yy < (int)array2d_Nph[0].size(); yy++) {
-                                array2d_Nph[xx][yy] = 0.0;
-                            }
-                        }
-                    }
+            for(unsigned int xx =0; xx < array2d_Nph.size(); xx++) {
+                for(unsigned int yy =0; yy < array2d_Nph[0].size(); yy++) {
                     
-                    //integral after camera exposure cut
-                    N_photons_cut = accumulate(array2d_Nph.cbegin(),
-                                               array2d_Nph.cend(), 0, [](auto sum, const auto& row) {
-                        return accumulate(row.cbegin(), row.cend(), sum);
-                    });
+                    int binc = background[xx][yy]+(int)array2d_Nph[xx][array2d_Nph[0].size()-1-yy];
+                    final_image.SetBinContent(xx+1, yy+1, binc);
                 }
+            }
                 
-                TH2I final_image(Form("pic_run%d_ev%d", run_count, entry), "",
-                                 x_pix, -0.5, x_pix -0.5,
-                                 y_pix, -0.5, y_pix -0.5);
-                
-                for(unsigned int xx =0; xx < array2d_Nph.size(); xx++) {
-                    for(unsigned int yy =0; yy < array2d_Nph[0].size(); yy++) {
-                        
-                        int binc = background[xx][yy]+(int)array2d_Nph[xx][array2d_Nph[0].size()-1-yy];
-                        final_image.SetBinContent(xx+1, yy+1, binc);
-                    }
-                }
-                
-                //Cut again the hits to save the effective length and energy which is visible in the final image,
-                //and compute the number of photons post-cut
-                if (options["exposure_time_effect"]=="True") {
-                    if (randcut<readout_time) {
-                        double y_cut_tmp = config.getDouble("y_dim") * (0.5 - randcut/readout_time);
+            //Cut again the hits to save the effective length and energy which is visible in the final image,
+            //and compute the number of photons post-cut
+            if (config.getBool("exposure_time_effect")) {
+                if (randcut<readout_time) {
+                    double y_cut_tmp = config.getDouble("y_dim") * (0.5 - randcut/readout_time);
 
-                        // Removing elements from x_hits_tr
-                        x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
-                            return y_hits_tr[&x-&*x_hits_tr.begin()] < y_cut_tmp;
-                        }), x_hits_tr.end());
-                        // Removing elements from z_hits_tr
-                        z_hits_tr.erase(std::remove_if(z_hits_tr.begin(), z_hits_tr.end(), [&](const double& z) {
-                            return y_hits_tr[&z-&*z_hits_tr.begin()] < y_cut_tmp;
-                        }), z_hits_tr.end());
-                        // Removing elements from energy_hits
-                        energy_hits.erase(std::remove_if(energy_hits.begin(), energy_hits.end(), [&](const double& e) {
-                            return y_hits_tr[&e-&*energy_hits.begin()] < y_cut_tmp;
-                        }), energy_hits.end());
+                    // Removing elements from x_hits_tr
+                    x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
+                        return y_hits_tr[&x-&*x_hits_tr.begin()] < y_cut_tmp;
+                    }), x_hits_tr.end());
+                    // Removing elements from z_hits_tr
+                    z_hits_tr.erase(std::remove_if(z_hits_tr.begin(), z_hits_tr.end(), [&](const double& z) {
+                        return y_hits_tr[&z-&*z_hits_tr.begin()] < y_cut_tmp;
+                    }), z_hits_tr.end());
+                    // Removing elements from energy_hits
+                    energy_hits.erase(std::remove_if(energy_hits.begin(), energy_hits.end(), [&](const double& e) {
+                        return y_hits_tr[&e-&*energy_hits.begin()] < y_cut_tmp;
+                    }), energy_hits.end());
+                    
+                    // Removing elements from y_hits_tr [must be done after the previous ones]
+                    y_hits_tr.erase(std::remove_if(y_hits_tr.begin(), y_hits_tr.end(),[&](const double& y) {
+                        return y < y_cut_tmp;
+                    }), y_hits_tr.end());
                         
-                        // Removing elements from y_hits_tr [must be done after the previous ones]
-                        y_hits_tr.erase(std::remove_if(y_hits_tr.begin(), y_hits_tr.end(),[&](const double& y) {
-                            return y < y_cut_tmp;
-                        }), y_hits_tr.end());
-                        
-                    } else if (randcut> config.getDouble("exposure_time") ) {
-                        double y_cut_tmp = config.getDouble("y_dim") * (0.5 - (randcut - config.getDouble("exposure_time")) / readout_time);
+                } else if (randcut> config.getDouble("exposure_time") ) {
+                    double y_cut_tmp = config.getDouble("y_dim") * (0.5 - (randcut - config.getDouble("exposure_time")) / readout_time);
 
-                        // Removing elements from x_hits_tr
-                        x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
-                            return y_hits_tr[&x-&*x_hits_tr.begin()] > y_cut_tmp;
-                        }), x_hits_tr.end());
-                        // Removing elements from z_hits_tr
-                        z_hits_tr.erase(std::remove_if(z_hits_tr.begin(), z_hits_tr.end(), [&](const double& z) {
-                            return y_hits_tr[&z-&*z_hits_tr.begin()] > y_cut_tmp;
-                        }), z_hits_tr.end());
-                        // Removing elements from energy_hits
-                        energy_hits.erase(std::remove_if(energy_hits.begin(), energy_hits.end(), [&](const double& e) {
-                            return y_hits_tr[&e-&*energy_hits.begin()] > y_cut_tmp;
-                        }), energy_hits.end());
-                        
-                        // Removing elements from y_hits_tr [must be done after the previous ones]
-                        y_hits_tr.erase(std::remove_if(y_hits_tr.begin(), y_hits_tr.end(),[&](const double& y) {
-                            return y > y_cut_tmp;
-                        }), y_hits_tr.end());
-                        
-                    }
+                    // Removing elements from x_hits_tr
+                    x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
+                        return y_hits_tr[&x-&*x_hits_tr.begin()] > y_cut_tmp;
+                    }), x_hits_tr.end());
+                    // Removing elements from z_hits_tr
+                    z_hits_tr.erase(std::remove_if(z_hits_tr.begin(), z_hits_tr.end(), [&](const double& z) {
+                        return y_hits_tr[&z-&*z_hits_tr.begin()] > y_cut_tmp;
+                    }), z_hits_tr.end());
+                    // Removing elements from energy_hits
+                    energy_hits.erase(std::remove_if(energy_hits.begin(), energy_hits.end(), [&](const double& e) {
+                        return y_hits_tr[&e-&*energy_hits.begin()] > y_cut_tmp;
+                    }), energy_hits.end());
                     
-                    cut_energy = accumulate(energy_hits.begin(), energy_hits.end(), 0.0);
+                    // Removing elements from y_hits_tr [must be done after the previous ones]
+                    y_hits_tr.erase(std::remove_if(y_hits_tr.begin(), y_hits_tr.end(),[&](const double& y) {
+                        return y > y_cut_tmp;
+                    }), y_hits_tr.end());
                     
-                    if(x_hits_tr.size()==0){
-                        cut_energy = 0;
-                        cout<<"The track was completely cut after smearing"<<endl;
+                }
+                    
+                cut_energy = accumulate(energy_hits.begin(), energy_hits.end(), 0.0);
+                    
+                if(x_hits_tr.size()==0){
+                    cut_energy = 0;
+                    cout<<"The track was completely cut after smearing"<<endl;
                         
-                        TH2I final_image_cut(Form("pic_run%d_ev%d", run_count, entry), "",
+                    TH2I final_image_cut(Form("pic_run%d_ev%d", runCount, entry), "",
                                          x_pix, -0.5, x_pix -0.5,
                                          y_pix, -0.5, y_pix -0.5);
                         
-                        for(unsigned int xx =0; xx < background.size(); xx++) {
-                            for(unsigned int yy =0; yy < background[0].size(); yy++) {
-                                final_image_cut.SetBinContent(xx+1, yy+1, background[xx][yy]);
-                            }
+                    for(unsigned int xx =0; xx < background.size(); xx++) {
+                        for(unsigned int yy =0; yy < background[0].size(); yy++) {
+                            final_image_cut.SetBinContent(xx+1, yy+1, background[xx][yy]);
                         }
-                        
-                        outtree->Fill();
-                        outfile->cd();
-                        final_image_cut.Write();
-                        
-                        continue;
                     }
+                        
+                    outtree->Fill();
+                    outfile->cd();
+                    final_image_cut.Write();
+                        
+                    continue;
+                }
                     
-                }
-                
-                
-                // Compute variables to be saved in the tree
-                proj_track_2D_cut = 0;
-                for(int ihit=0; ihit < numhits-1; ihit++){
-                    proj_track_2D_cut += sqrt((x_hits_tr[ihit+1]-x_hits_tr[ihit])*(x_hits_tr[ihit+1]-x_hits_tr[ihit])+
-                                              (y_hits_tr[ihit+1]-y_hits_tr[ihit])*(y_hits_tr[ihit+1]-y_hits_tr[ihit])
-                                             );
-                }
-                // DEBUG
-                //cout<<"proj_track_2D_cut = "<<Form("%.10f", proj_track_2D_cut)<<endl;
-                
-                
-                x_min_cut = (*min_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * config.getDouble("x_dim")) * static_cast<double>(x_pix) / config.getDouble("x_dim");
-                x_max_cut = (*max_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * config.getDouble("x_dim")) * static_cast<double>(x_pix) / config.getDouble("x_dim");
-                y_min_cut = (*min_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * config.getDouble("y_dim")) * static_cast<double>(y_pix) / config.getDouble("y_dim");
-                y_max_cut = (*max_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * config.getDouble("y_dim")) * static_cast<double>(y_pix) / config.getDouble("y_dim");
-                z_min_cut = min((*max_element(z_hits_tr.begin(),
-                                                 z_hits_tr.end()) + config.getDouble("z_extra")),
-                                (*min_element(z_hits_tr.begin(),
-                                                 z_hits_tr.end()) + config.getDouble("z_extra")));
-                z_max_cut = max((*max_element(z_hits_tr.begin(),
-                                                 z_hits_tr.end()) + config.getDouble("z_extra")),
-                                (*min_element(z_hits_tr.begin(),
-                                                 z_hits_tr.end()) + config.getDouble("z_extra")));
-                //DEBUG
-                //cout<<" x_min_cut = "<<x_min_cut<<" x_max_cut = "<<x_max_cut<<" y_min_cut = "<<y_minv<<" y_max_cut = "<<y_max_cut<<" z_min_cut = "<<z_min_cut<<" z_max_cut = "<<z_max_cut<<endl;
-                
-                
-                // if there are at least 2 hits compute theta and phi
-                if(x_hits_tr.size() > 1) {
-                    phi   = atan2( y_hits_tr[1] - y_hits_tr[0],
-                                   x_hits_tr[1] - x_hits_tr[0]
-                                  );
-                    theta = acos((z_hits_tr[1] - z_hits_tr[0]) /
-                                 sqrt(
-                                     (x_hits_tr[1] - x_hits_tr[0])*(x_hits_tr[1] - x_hits_tr[0])+
-                                     (y_hits_tr[1] - y_hits_tr[0])*(y_hits_tr[1] - y_hits_tr[0])+
-                                     (z_hits_tr[1] - z_hits_tr[0])*(z_hits_tr[1] - z_hits_tr[0]))
-                                 );
-                } else {
-                    phi   = -999;
-                    theta = -999;
-                }
-                
-                if(options["SRIM"]=="False") {
-                    track_length_3D = accumulate(tracklen_hits->begin(), tracklen_hits->end(), 0.0);
-                    px              = (*px_particle)[0];
-                    py              = (*py_particle)[0];
-                    pz              = (*pz_particle)[0];
-                }
-                
-                auto tb = std::chrono::steady_clock::now();
-                std::chrono::duration<double> durtmp=tb-ta;
-                cout << "Time taken in seconds to compute_cmos_with_saturation is: " << durtmp.count() << endl;
-                
-                
-                outtree->Fill();
-                outfile->cd();
-                
-                // DEBUG
-                final_image.Write();
-                
             }
-            //outfile->cd("event_info");
-            outtree->Write();
+                
+                
+            // Compute variables to be saved in the tree
+            proj_track_2D_cut = 0;
+            for(int ihit=0; ihit < numhits-1; ihit++){
+                proj_track_2D_cut += sqrt((x_hits_tr[ihit+1]-x_hits_tr[ihit])*(x_hits_tr[ihit+1]-x_hits_tr[ihit])+
+                                            (y_hits_tr[ihit+1]-y_hits_tr[ihit])*(y_hits_tr[ihit+1]-y_hits_tr[ihit])
+                                            );
+            }
+            // DEBUG
+            //cout<<"proj_track_2D_cut = "<<Form("%.10f", proj_track_2D_cut)<<endl;
             
-            cout<<Form("COMPLETED RUN %d",run_count)<<endl;
             
-            f->Close();
-            outfile->Close();
+            x_min_cut = (*min_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * config.getDouble("x_dim")) * static_cast<double>(x_pix) / config.getDouble("x_dim");
+            x_max_cut = (*max_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * config.getDouble("x_dim")) * static_cast<double>(x_pix) / config.getDouble("x_dim");
+            y_min_cut = (*min_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * config.getDouble("y_dim")) * static_cast<double>(y_pix) / config.getDouble("y_dim");
+            y_max_cut = (*max_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * config.getDouble("y_dim")) * static_cast<double>(y_pix) / config.getDouble("y_dim");
+            z_min_cut = min((*max_element(z_hits_tr.begin(),
+                                                z_hits_tr.end()) + config.getDouble("z_extra")),
+                            (*min_element(z_hits_tr.begin(),
+                                                z_hits_tr.end()) + config.getDouble("z_extra")));
+            z_max_cut = max((*max_element(z_hits_tr.begin(),
+                                                z_hits_tr.end()) + config.getDouble("z_extra")),
+                            (*min_element(z_hits_tr.begin(),
+                                                z_hits_tr.end()) + config.getDouble("z_extra")));
+            //DEBUG
+            //cout<<" x_min_cut = "<<x_min_cut<<" x_max_cut = "<<x_max_cut<<" y_min_cut = "<<y_minv<<" y_max_cut = "<<y_max_cut<<" z_min_cut = "<<z_min_cut<<" z_max_cut = "<<z_max_cut<<endl;
             
-            run_count ++;*/
-
-
-        
-        ///// bbbbbbbbbbb
-
+            
+            // if there are at least 2 hits compute theta and phi
+            if(x_hits_tr.size() > 1) {
+                phi   = atan2( y_hits_tr[1] - y_hits_tr[0],
+                                x_hits_tr[1] - x_hits_tr[0]
+                                );
+                theta = acos((z_hits_tr[1] - z_hits_tr[0]) /
+                                sqrt(
+                                    (x_hits_tr[1] - x_hits_tr[0])*(x_hits_tr[1] - x_hits_tr[0])+
+                                    (y_hits_tr[1] - y_hits_tr[0])*(y_hits_tr[1] - y_hits_tr[0])+
+                                    (z_hits_tr[1] - z_hits_tr[0])*(z_hits_tr[1] - z_hits_tr[0]))
+                                );
+            } else {
+                phi   = -999;
+                theta = -999;
+            }
+                
+            if(config.getBool("SRIM")) {
+                track_length_3D = accumulate(tracklen_hits->begin(), tracklen_hits->end(), 0.0);
+                px              = (*px_particle)[0];
+                py              = (*py_particle)[0];
+                pz              = (*pz_particle)[0];
+            }
+            
+            auto tb = std::chrono::steady_clock::now();
+            std::chrono::duration<double> durtmp=tb-ta;
+            cout << "Time taken in seconds to compute_cmos_with_saturation is: " << durtmp.count() << endl;
+                
+                
+            outtree->Fill();
+            outfile->cd();
+                
+            // DEBUG
+            final_image.Write();
+                
         }
+        //outfile->cd("event_info");
+        outtree->Write();
+            
+        cout<<Form("COMPLETED RUN %d",runCount)<<endl;
+            
+        f->Close();
+        outfile->Close();
+            
+        runCount ++;
         
     }
 }

@@ -58,4 +58,18 @@ std::string resolvePath(const std::string& relativePath) {
     return std::filesystem::absolute(std::filesystem::path(relativePath)).string();
 }
 
+std::vector<double> arange(double start, double stop, double step) {
+    
+    int length = (stop - start) / step;
+    std::vector<double> result(length+1);
+    double value = start;
+    std::generate(result.begin(), result.end(), [&value, step]() mutable {
+        double current = value;
+        value += step;
+        return current;
+    });
+    return result;
+}
+
+
 }
