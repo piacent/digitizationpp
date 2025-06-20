@@ -1,3 +1,12 @@
+/*
+ * Copyright (C) 2025 CYGNO Collaboration
+ *
+ *
+ * Author: Stefano Piacentini
+ * Created in 2025
+ *
+ */
+ 
 #include "TrackProcessor.h"
 #include "ConfigManager.h"
 #include "Utils.h"

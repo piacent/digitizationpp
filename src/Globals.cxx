@@ -1,3 +1,12 @@
+/*
+ * Copyright (C) 2025 CYGNO Collaboration
+ *
+ *
+ * Author: Stefano Piacentini
+ * Created in 2025
+ *
+ */
+
 // Globals.cxx
 
 double GEM1_gain = 0.0, GEM2_gain = 0.0, GEM3_gain = 0.0;
