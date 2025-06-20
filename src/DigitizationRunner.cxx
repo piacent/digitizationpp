@@ -56,9 +56,7 @@ DigitizationRunner::DigitizationRunner(const std::string& configFile_,
 void DigitizationRunner::run() {
     auto t0 = std::chrono::steady_clock::now();
 
-    if (config.getBool("fixed_seed")) {
-        gRandom->SetSeed(10);
-    }
+    setSeed();
 
     processRootFiles();
 
@@ -343,8 +341,6 @@ void DigitizationRunner::AddBckg(std::vector<std::vector<int>>& background) {
 // ================================================================================================
 
 void DigitizationRunner::processRootFiles() {
-
-    setSeed();
     
     const string infolder  = Utils::resolvePath(inputDir);
     const string outfolder = Utils::resolvePath(outputDir);
