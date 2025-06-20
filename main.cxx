@@ -1,6 +1,14 @@
+/*
+ * Copyright (C) 2025 CYGNO Collaboration
+ *
+ *
+ * Author: Stefano Piacentini
+ * Created in 2025
+ *
+ */
+
 #include "ConfigManager.h"
 #include "DigitizationRunner.h"
-//#include "Utils.h"
 
 #include <iostream>
 #include <unistd.h>
