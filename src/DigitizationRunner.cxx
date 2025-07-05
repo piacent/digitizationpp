@@ -75,9 +75,9 @@ void DigitizationRunner::run() {
 }
 
 void DigitizationRunner::initializeGlobals() {
-    GEM1_gain = 0.0347 * exp(0.0209 * config.getDouble("GEM1_HV"));
-    GEM2_gain = 0.0347 * exp(0.0209 * config.getDouble("GEM2_HV"));
-    GEM3_gain = 0.0347 * exp(0.0209 * config.getDouble("GEM3_HV"));
+    GEM1_gain = 0.03 * exp(0.0209 * config.getDouble("GEM1_HV"));
+    GEM2_gain = 0.03 * exp(0.0209 * config.getDouble("GEM2_HV"));
+    GEM3_gain = 0.03 * exp(0.0209 * config.getDouble("GEM3_HV"));
 
     extraction_eff_GEM1 = 0.87319885 * exp(-0.002 * config.getDouble("GEM1_HV"));
     extraction_eff_GEM2 = 0.87319885 * exp(-0.002 * config.getDouble("GEM2_HV"));
@@ -90,7 +90,7 @@ void DigitizationRunner::prepareCameraSettings() {
     y_pix = 2304;
     if (camera == "Fusion") {
         x_pix = 2304;
-        optcounts_per_photon = 2.; // apparently calibrated with LEMOn in the past
+        optcounts_per_photon = 4.; // (Fusion sheet) counts/photon = QE (0.8) / e–/count (0.21)
         y_sensor_size = 14.976;    // mm
         readout_time  = 184.4;     // ms in in ultra quiet scan (UQS)
     } else if (camera == "Quest1" || camera == "Quest2") {
