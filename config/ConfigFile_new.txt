@@ -1,13 +1,13 @@
 {
 # Detector physics
 ## diffusion parameters from https://arxiv.org/pdf/2007.00608.pdf
-## for other drift fields see https://github.com/CYGNUS-RD/digitization/tree/master/compute_drift_velocity
+## for other drift fields, use: https://github.com/pietro14/digitization/blob/h5/garfield_data/compute_value_from_csv.py
 'diff_const_sigma0T'    : 0.13475,     # diffusion constant [mm]^2
-'diff_coeff_T'          : 0.0143819,   # diffusion parameter [mm/sqrt(cm)]^2 for 1 kV/cm
-#'diff_coeff_T'          : 0.0198721,   # diffusion parameter [mm/sqrt(cm)]^2 for 500 V/cm
+'diff_coeff_T'          : 0.0143819,   # diffusion parameter [mm/sqrt(cm)]^2 for 0.8 kV/cm
+#'diff_coeff_T'          : 0.0198721,   # diffusion parameter [mm/sqrt(cm)]^2 for 0.5 kV/cm (RUN 5)
 'diff_const_sigma0L'    : 0.0676,     # diffusion constant [mm]^2
-'diff_coeff_L'          : 0.0103483,    # diffusion parameter [mm/sqrt(cm)]^2 for 1 kV/cm
-#'diff_coeff_L'          : 0.0152483,   # diffusion parameter [mm/sqrt(cm)]^2 for 500 V/cm
+'diff_coeff_L'          : 0.0103483,    # diffusion parameter [mm/sqrt(cm)]^2 for 0.8 kV/cm
+#'diff_coeff_L'          : 0.0152483,   # diffusion parameter [mm/sqrt(cm)]^2 for 0.5 kV/cm (RUN 5)
 'ion_pot'               : 0.0350,    # ionization potential for He/CF4 60/40 [keV]
 'photons_per_el'        : 0.07,      # number of photons per electron produced in the avalanche
 'absorption_l'          : 1350.,     # absorption length in [mm]

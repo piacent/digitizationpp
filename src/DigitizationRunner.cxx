@@ -95,7 +95,7 @@ void DigitizationRunner::prepareCameraSettings() {
         readout_time  = 184.4;     // ms in in ultra quiet scan (UQS)
     } else if (camera == "Quest1" || camera == "Quest2") {
         x_pix = 4096;
-        optcounts_per_photon = 4.49; // equal to 2.*2.245 which is the ratio of e/count of the two cameras
+        optcounts_per_photon = 8.98; // equal to 4.*2.245 which is the ratio of e/count of the two cameras
         y_sensor_size = 10.598;      // mm
         readout_time = (camera == "Quest1") ? 199.0 : 39.0; // ms in in ultra quiet scan (UQS)
     }
