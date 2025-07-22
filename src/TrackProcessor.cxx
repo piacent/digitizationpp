@@ -689,6 +689,14 @@ vector<double> TrackProcessor::NelGEM2(const vector<double>& energyDep, const ve
     vector<double> drift_l;
     int opt_gem=config.getDouble("z_extra");
     transform(z_hit.begin(),z_hit.end(),back_inserter(drift_l), [&] (double a) { return a+opt_gem;});
+
+    // Check if hits with negative drift length
+    vector<bool> negatives(drift_l.size());
+    transform(drift_l.begin(), drift_l.end(), negatives.begin(),
+              [](int x) { return x < 0; });
+    if (any_of(negatives.begin(), negatives.end(), [](bool b) { return b; })) {
+        throw runtime_error("TrackProcessor::NelGEM2: track contains hits with negative drift length.\n");
+    }
     
     vector<double> n_ioniz_el_mean(n_ioniz_el_ini.size(), 0.0);
     
