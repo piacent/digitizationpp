@@ -127,7 +127,7 @@ private:
      std::string inputDir;           ///< Path to input directory
      std::string outputDir;          ///< Path to output directory
      int runCount = 0;               ///< Current run number
-     int NMAX_EVENTS = 200;          ///< Max number of events to process
+     int NMAX_EVENTS = 200;          ///< Max number of events to process per output file
      std::string SOURCE_DIR = "";    ///< Path to event source directory
  
 };
