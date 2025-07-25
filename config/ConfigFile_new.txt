@@ -22,7 +22,7 @@
 # Geometry
 'MC_xaxis'              : '-z',      # Digitization axis corrisponding to input x - axis (See README to check digitization ref. frame)
 'MC_yaxis'              : '-y',      # Digitization axis corrisponding to input y - axis (See README to check digitization ref. frame)
-'MC_zaxis'              : 'x',       # Digitization axis corrisponding to input z - axis (See README to check digitization ref. frame)
+'MC_zaxis'              : '-x',      # Digitization axis corrisponding to input z - axis (See README to check digitization ref. frame)
 
 'x_offset'              : 0.,        # Position [mm] of the origin of the input MC ref. frame in the digitization ref. frame along the x axis (of digitization ref. frame)
 'y_offset'              : 0.,        # Position [mm] of the origin of the input MC ref. frame in the digitization ref. frame along the y axis (of digitization ref. frame)
