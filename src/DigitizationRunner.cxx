@@ -739,9 +739,9 @@ void DigitizationRunner::processRootFiles() {
                     
                     // Axis mapping from input MC frame to digitization frame
                     map<char, std::pair<char, double>> axis_map;
-                    axis_map['x'] = getAxisMapping(config.get("MC_xaxis"));  // digitization x = MC_xaxis, sign
-                    axis_map['y'] = getAxisMapping(config.get("MC_yaxis"));  // digitization y = MC_yaxis, sign
-                    axis_map['z'] = getAxisMapping(config.get("MC_zaxis"));  // digitization z = MC_zaxis, sign
+                    axis_map['x'] = getAxisMapping(config.get("MC_xaxis"));  // MC x axis  = digit. axis, sign
+                    axis_map['y'] = getAxisMapping(config.get("MC_yaxis"));  // MC y axis  = digit. axis, sign
+                    axis_map['z'] = getAxisMapping(config.get("MC_zaxis"));  // MC z axis  = digit. axis, sign
                     
                     // Map from MC axis name to the corresponding input hit vector
                     map<char, const vector<double>*> input_axes;

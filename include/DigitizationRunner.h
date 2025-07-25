@@ -124,10 +124,10 @@ private:
      void AddBckg(std::vector<std::vector<int>>& background);
 
      /**
-     * @brief Parses an axis label string and returns the corresponding MC axis and sign.
+     * @brief Parses a MC axis label string and returns the corresponding digititazion axis and sign.
      *
      * This function interprets a string like "x", "-y", or "z" to determine which
-     * MC axis corresponds to a digitization axis, and whether that axis is inverted.
+     * digitization axis corresponds to a MC axis, and whether that axis is inverted.
      *
      * For example:
      * - "x"   → returns ('x', 1.0)
@@ -137,7 +137,7 @@ private:
      *                   Expected format is one of: "x", "y", "z", "-x", "-y", or "-z".
      *
      * @return A pair where:
-     *         - first: the MC axis as a char ('x', 'y', or 'z')
+     *         - first: the digitization axis as a char ('x', 'y', or 'z')
      *         - second: a double representing the sign (1.0 or -1.0)
      */
      std::pair<char, double> getAxisMapping(const std::string& axis_label);
