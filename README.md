@@ -90,6 +90,10 @@ The reference frame (RF) used in digitization is the following:
 * depth axis (**z**) is pointing from GEMs to cathode
 * the **origin** is at the center of the detector/image in xy and on the top face of GEM1 in z
 
+Here's an image showing this RF:
+
+![Example Image](doc/Digi_RF.png)
+
 This means that **the user must specify the relative orientation of the axes and the relative origin offset between the input MC reference frame and the digitization reference frame**. This is realized by means of the parameters `MC_xaxis`, `MC_yaxis`, `MC_zaxis`, and `x_offset`, `y_offset`, `z_offset`.
 
 # Example
