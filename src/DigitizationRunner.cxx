@@ -742,7 +742,7 @@ void DigitizationRunner::processRootFiles() {
                     axis_map['x'] = getAxisMapping(config.get("MC_xaxis"));  // digitization x = MC_xaxis, sign
                     axis_map['y'] = getAxisMapping(config.get("MC_yaxis"));  // digitization y = MC_yaxis, sign
                     axis_map['z'] = getAxisMapping(config.get("MC_zaxis"));  // digitization z = MC_zaxis, sign
-
+                    
                     // Map from MC axis name to the corresponding input hit vector
                     map<char, const vector<double>*> input_axes;
                     input_axes['x'] = x_hits;
@@ -759,12 +759,19 @@ void DigitizationRunner::processRootFiles() {
                     const char axes[3] = {'x', 'y', 'z'};
                     for (int i = 0; i < 3; ++i) {
                         char digit_axis = axes[i];
-                    
+                        char mc_axis = 'n'; // n stands for still not defined
+                        
                         // Retrieve the mapped MC axis and sign
-                        pair<char, double> mapping = axis_map[digit_axis];
-                        char mc_axis = mapping.first;
+                        for (const auto& pair : axis_map) {
+                            const char map_mc_axis  = pair.first;
+                            char map_digit_axis     = pair.second.first;
+                            if (map_digit_axis == digit_axis) {
+                                mc_axis = map_mc_axis;
+                            }
+                        }
+                        pair<char, double> mapping = axis_map[mc_axis];
                         double sign = mapping.second;
-                    
+                        
                         // Get input vector (MC) and output vector (digitization)
                         const vector<double>* input_vec = input_axes[mc_axis];
                         vector<double>* output_vec = output_axes[digit_axis];
@@ -792,10 +799,12 @@ void DigitizationRunner::processRootFiles() {
                 }
                     
                 // DEBUG
-                //for(int ihit=0; ihit < numhits; ihit++) {
-                //    cout<<x_hits_tr[ihit]<<",";
-                //    cout<<y_hits_tr[ihit]<<",";
-                //    cout<<z_hits_tr[ihit]<<"\n";
+                //if(entry == 0) {
+                //    for(int ihit=0; ihit < numhits; ihit++) {
+                //       cout<<x_hits_tr[ihit]<<",";
+                //       cout<<y_hits_tr[ihit]<<",";
+                //       cout<<z_hits_tr[ihit]<<"\n";
+                //    }
                 //}
                 
                 vector<double> energy_hits = (*energyDep_hits);
