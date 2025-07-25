@@ -37,6 +37,8 @@ DigitizationRunner::DigitizationRunner(const std::string& configFile_,
         exit(EXIT_FAILURE);
     }
 
+    config.validateAxisMappings();
+
     runCount = config.getInt("start_run_number");
 
     // DEBUG
