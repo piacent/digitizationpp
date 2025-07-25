@@ -458,7 +458,8 @@ void DigitizationRunner::processRootFiles() {
         inputtree->SetBranchAddress("y_hits", &y_hits);
         inputtree->SetBranchAddress("z_hits", &z_hits);
             
-        if(config.getBool("NR")) { // TO BE CHECK ON REAL SRIM SIMULATIONS
+        
+        if(config.getBool("SRIM")) {// TO BE CHECK ON REAL SRIM SIMULATIONS
             inputtree->SetBranchAddress("particle_type", &particle_type);
             inputtree->SetBranchAddress("ekin_particle", &ekin_particle);
         }
@@ -726,9 +727,10 @@ void DigitizationRunner::processRootFiles() {
                     transform(x_hits->begin(),
                                 x_hits->end(),
                                 back_inserter(z_hits_tr),
-                                [&] (double a) {return a + config.getDouble("z_offset");});
+                                [&] (double a) {return -a + config.getDouble("z_offset");});
+                    // NOTE: in Geant longitunal TPC axis is towards the GEMs, for the digi it's
+                    // assume it's towards the cathode
                     
-                    // FIXME: [Check which is the z axis orientation]
                         
                 }
                     
