@@ -682,7 +682,7 @@ void DigitizationRunner::processRootFiles() {
       
                 if (energy < config.getDouble("ion_pot")){
                     energy = 0;
-                    TH2I final_image(Form("pic_run%d_ev%d", runCount, entry), "",
+                    TH2I final_image(Form("pic_run%d_ev%d", runCount, entry-start), "",
                                         x_pix, -0.5, x_pix -0.5,
                                         y_pix, -0.5, y_pix -0.5);
                     
@@ -927,7 +927,7 @@ void DigitizationRunner::processRootFiles() {
                     if(x_hits_tr.size()==0){
                         cut_energy = 0;
                         cout<<"The track was completely cut"<<endl;
-                        TH2I final_image(Form("pic_run%d_ev%d", runCount, entry), "",
+                        TH2I final_image(Form("pic_run%d_ev%d", runCount, entry-start), "",
                                             x_pix, -0.5, x_pix -0.5,
                                             y_pix, -0.5, y_pix -0.5);
                         
@@ -1006,7 +1006,7 @@ void DigitizationRunner::processRootFiles() {
                     });
                 }
                 
-                TH2I final_image(Form("pic_run%d_ev%d", runCount, entry), "",
+                TH2I final_image(Form("pic_run%d_ev%d", runCount, entry-start), "",
                                     x_pix, -0.5, x_pix -0.5,
                                     y_pix, -0.5, y_pix -0.5);
                     
@@ -1071,7 +1071,7 @@ void DigitizationRunner::processRootFiles() {
                         cut_energy = 0;
                         cout<<"The track was completely cut after smearing"<<endl;
                             
-                        TH2I final_image_cut(Form("pic_run%d_ev%d", runCount, entry), "",
+                        TH2I final_image_cut(Form("pic_run%d_ev%d", runCount, entry-start), "",
                                              x_pix, -0.5, x_pix -0.5,
                                              y_pix, -0.5, y_pix -0.5);
                             
