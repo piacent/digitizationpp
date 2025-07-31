@@ -75,5 +75,6 @@
 'WID'                   : 5,         # Integer parameter: the smaller WID is, the smaller the ram usage but the higher the time consumption
 'Parallel_threads'      : 8,         # Integer parameter: number of threads to use in parallel calculation
 'queue'                 : 0,	     # If you are sending to the CNAF queue write 1. The outputfiles will be forced to be written in local folder to be sent to cloud
+'redpix_output'         : False,      # True if you want the output format being the redpixes instead of images. NOTE: this will change the output namefile to "digi_RunXXXXX.root"
 
 }

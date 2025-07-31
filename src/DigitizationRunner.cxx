@@ -360,6 +360,35 @@ pair<char, double> DigitizationRunner::getAxisMapping(const string& axis_label) 
     return make_pair(axis, sign);
 }
 
+void DigitizationRunner::FillRedpix(const std::vector<std::vector<double>>& image,
+                                   std::vector<uint16_t>* redpix_ix,
+                                   std::vector<uint16_t>* redpix_iy,
+                                   std::vector<uint16_t>* redpix_iz)
+{
+    redpix_ix->clear();
+    redpix_iy->clear();
+    redpix_iz->clear();
+
+    const int nRows = image.size();
+    const int nCols = image[0].size();
+
+    for (int ix = 0; ix < nRows; ++ix) {
+        for (int iy = 0; iy < nCols; ++iy) {
+            double content = image[ix][iy];
+            if (content != 0.0) {
+                redpix_ix->push_back(static_cast<uint16_t>(ix));
+                redpix_iy->push_back(static_cast<uint16_t>(iy));
+                redpix_iz->push_back(static_cast<uint16_t>(content));
+                
+            }
+        }
+    }
+    return;
+}
+
+
+
+
 
 
 // ================================================================================================
@@ -495,12 +524,21 @@ void DigitizationRunner::processRootFiles() {
         int digipart = 0;
         
         while(fileStillToDigitize) {
-            
-            // standard: name of output file = histograms_RunRRRRR.root (R run number)
+
+            // Name of output file
+            // standard:       histograms_RunRRRRR.root (R run number)
+            // redpix_ouput:         digi_RunRRRRR.root (R run number)
             if(config.getBool("queue")) fnameoutfolder="./";
-            string fileoutname= Form("%s/histograms_Run%05d.root",
-                                     fnameoutfolder.c_str(),
-                                     runCount);
+            string fileoutname = "";
+            if(config.getBool("redpix_output")) {
+                fileoutname= Form("%s/digi_Run%05d.root",
+                                  fnameoutfolder.c_str(),
+                                  runCount);
+            } else {
+                fileoutname= Form("%s/histograms_Run%05d.root",
+                                  fnameoutfolder.c_str(),
+                                  runCount);
+            }
     
     
             auto outfile = shared_ptr<TFile> {TFile::Open(fileoutname.c_str(),
@@ -544,6 +582,11 @@ void DigitizationRunner::processRootFiles() {
             Float_t z_min_cut = -1;
             Float_t z_max_cut = -1;
             Float_t proj_track_2D_cut = -1;
+
+            int nRedpix;
+            vector<uint16_t>*   redpix_ix = new vector<uint16_t>();
+            vector<uint16_t>*   redpix_iy = new vector<uint16_t>();
+            vector<uint16_t>*   redpix_iz = new vector<uint16_t>();
                 
             auto outtree = new TTree("event_info", "event_info");
                 
@@ -583,13 +626,22 @@ void DigitizationRunner::processRootFiles() {
                 outtree->Branch("z_max_cut", &z_max_cut, "z_max_cut/F");
                 outtree->Branch("proj_track_2D_cut", &proj_track_2D_cut, "proj_track_2D_cut/F");
             }
+            // Create branches for redpixes
+            outtree->Branch("nRedpix", &nRedpix, "nRedpix/I");
+            outtree->Branch("redpix_ix", &redpix_ix);
+            outtree->Branch("redpix_iy", &redpix_iy);
+            outtree->Branch("redpix_iz", &redpix_iz);
 
             int start = firstentry + digipart * NMAX_EVENTS;
             int stop  = start + NMAX_EVENTS-1;
             if(stop >= lastentry) stop = lastentry;
             for(int entry = start; entry <= stop; entry++) { // RUNNING ON ENTRIES
                 cout<<"DEBUG: Digitizing entry "<<entry<<", digipart = "<<digipart<<"..."<<endl;
-
+                if(config.getBool("redpix_output")) {
+                    redpix_ix->clear();
+                    redpix_iy->clear();
+                    redpix_iz->clear();
+                }
                 
                 
                 inputtree->GetEntry(entry);
@@ -682,7 +734,7 @@ void DigitizationRunner::processRootFiles() {
       
                 if (energy < config.getDouble("ion_pot")){
                     energy = 0;
-                    TH2I final_image(Form("pic_run%d_ev%d", runCount, entry), "",
+                    TH2I final_image(Form("pic_run%d_ev%d", runCount, entry-start), "",
                                         x_pix, -0.5, x_pix -0.5,
                                         y_pix, -0.5, y_pix -0.5);
                     
@@ -691,10 +743,15 @@ void DigitizationRunner::processRootFiles() {
                             final_image.SetBinContent(xx+1, yy+1, background[xx][yy]);
                         }
                     }
-                        
+
+                    // Make sure nRedpix matches
+                    nRedpix = redpix_ix->size();
+                    
                     outtree->Fill();
                     outfile->cd();
-                    final_image.Write();
+                    if(!config.getBool("redpix_output")) {
+                        final_image.Write();
+                    }
                     
                     continue;
                 }
@@ -927,7 +984,7 @@ void DigitizationRunner::processRootFiles() {
                     if(x_hits_tr.size()==0){
                         cut_energy = 0;
                         cout<<"The track was completely cut"<<endl;
-                        TH2I final_image(Form("pic_run%d_ev%d", runCount, entry), "",
+                        TH2I final_image(Form("pic_run%d_ev%d", runCount, entry-start), "",
                                             x_pix, -0.5, x_pix -0.5,
                                             y_pix, -0.5, y_pix -0.5);
                         
@@ -936,10 +993,17 @@ void DigitizationRunner::processRootFiles() {
                                 final_image.SetBinContent(xx+1, yy+1, background[xx][yy]);
                             }
                         }
+                        // Make sure nRedpix matches
+                        if(config.getBool("redpix_output")) {
+                            
+                            nRedpix = redpix_ix->size();
+                        }
                         
                         outtree->Fill();
                         outfile->cd();
-                        final_image.Write();
+                        if(!config.getBool("redpix_output")) {
+                            final_image.Write();
+                        }
                         
                         continue;
                     }
@@ -960,6 +1024,7 @@ void DigitizationRunner::processRootFiles() {
                                                         NR_flag,
                                                         array2d_Nph
                                                         );
+                    
                 } else {// no saturation
                     processTrack.computeWithoutSaturation(x_hits_tr,
                                                         y_hits_tr,
@@ -983,6 +1048,7 @@ void DigitizationRunner::processRootFiles() {
                                                 VignMap);
                 }
                 
+                FillRedpix(array2d_Nph, redpix_ix, redpix_iy, redpix_iz);
                 
                 if (config.getBool("exposure_time_effect")) { //cut the track post-smearing
                     if (randcut<readout_time) {
@@ -1006,7 +1072,7 @@ void DigitizationRunner::processRootFiles() {
                     });
                 }
                 
-                TH2I final_image(Form("pic_run%d_ev%d", runCount, entry), "",
+                TH2I final_image(Form("pic_run%d_ev%d", runCount, entry-start), "",
                                     x_pix, -0.5, x_pix -0.5,
                                     y_pix, -0.5, y_pix -0.5);
                     
@@ -1071,7 +1137,7 @@ void DigitizationRunner::processRootFiles() {
                         cut_energy = 0;
                         cout<<"The track was completely cut after smearing"<<endl;
                             
-                        TH2I final_image_cut(Form("pic_run%d_ev%d", runCount, entry), "",
+                        TH2I final_image_cut(Form("pic_run%d_ev%d", runCount, entry-start), "",
                                              x_pix, -0.5, x_pix -0.5,
                                              y_pix, -0.5, y_pix -0.5);
                             
@@ -1080,10 +1146,16 @@ void DigitizationRunner::processRootFiles() {
                                 final_image_cut.SetBinContent(xx+1, yy+1, background[xx][yy]);
                             }
                         }
-                            
+                        
+                        // Make sure nRedpix matches
+                        nRedpix = redpix_ix->size();
+                        
                         outtree->Fill();
                         outfile->cd();
-                        final_image_cut.Write();
+                        if(!config.getBool("redpix_output")) {
+                            final_image_cut.Write();
+                        }
+                        
                             
                         continue;
                     }
@@ -1145,12 +1217,15 @@ void DigitizationRunner::processRootFiles() {
                 std::chrono::duration<double> durtmp=tb-ta;
                 cout << "Time taken in seconds to compute_cmos_with_saturation is: " << durtmp.count() << endl;
                     
-                    
+                // Make sure nRedpix matches
+                nRedpix = redpix_ix->size();
+                
                 outtree->Fill();
                 outfile->cd();
-                
                 // DEBUG
-                final_image.Write();
+                if(!config.getBool("redpix_output")) {
+                    final_image.Write();
+                }
             }
             //outfile->cd("event_info");
             outtree->Write();

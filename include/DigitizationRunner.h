@@ -141,6 +141,28 @@ private:
      *         - second: a double representing the sign (1.0 or -1.0)
      */
      std::pair<char, double> getAxisMapping(const std::string& axis_label);
+
+
+     /**
+     * @brief Fills redpix data from a 2D image.
+     *
+     * Scans all bins of the input vector<vector<double>> and identifies bins with non-zero content.
+     * For each such bin, the method stores:
+     * - the X bin index in `redpix_ix`
+     * - the Y bin index in `redpix_iy`
+     * - the bin content in `redpix_iz`
+     *
+     * All output vectors are cleared at the beginning of the method.
+     *
+     * @param image     A vector<vector<double>> representing the image to analyze.
+     * @param redpix_ix Pointer to a vector to be filled with X bin indices of non-zero pixels.
+     * @param redpix_iy Pointer to a vector to be filled with Y bin indices of non-zero pixels.
+     * @param redpix_iz Pointer to a vector to be filled with bin contents (e.g., charge or intensity).
+     */
+     void FillRedpix(const std::vector<std::vector<double>>& image,
+                     std::vector<uint16_t>* redpix_ix,
+                     std::vector<uint16_t>* redpix_iy,
+                     std::vector<uint16_t>* redpix_iz);
  
      ConfigManager config;           ///< Configuration manager
      std::string configFile;         ///< Path to the config file
