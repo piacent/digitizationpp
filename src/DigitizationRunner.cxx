@@ -360,7 +360,33 @@ pair<char, double> DigitizationRunner::getAxisMapping(const string& axis_label) 
     return make_pair(axis, sign);
 }
 
+void DigitizationRunner::FillRedpix(const std::vector<std::vector<double>>& image,
+                                   std::vector<uint16_t>* redpix_ix,
+                                   std::vector<uint16_t>* redpix_iy,
+                                   std::vector<uint16_t>* redpix_iz)
+{
+    redpix_ix->clear();
+    redpix_iy->clear();
+    redpix_iz->clear();
 
+    const int nRows = image.size();
+    const int nCols = image[0].size();
+
+    for (int ix = 0; ix < nRows; ++ix) {
+        for (int iy = 0; iy < nCols; ++iy) {
+            double content = image[ix][iy];
+            if (content != 0.0) {
+                // N.B. the repix definition of x and y in the reco is physical, so they
+                // must be swapped here
+                redpix_ix->push_back(static_cast<uint16_t>(iy));
+                redpix_iy->push_back(static_cast<uint16_t>(ix));
+                redpix_iz->push_back(static_cast<uint16_t>(content));
+                
+            }
+        }
+    }
+    return;
+}
 
 // ================================================================================================
 // ================================================================================================
@@ -495,12 +521,21 @@ void DigitizationRunner::processRootFiles() {
         int digipart = 0;
         
         while(fileStillToDigitize) {
-            
-            // standard: name of output file = histograms_RunRRRRR.root (R run number)
+
+            // Name of output file
+            // standard:       histograms_RunRRRRR.root (R run number)
+            // redpix_ouput:         digi_RunRRRRR.root (R run number)
             if(config.getBool("queue")) fnameoutfolder="./";
-            string fileoutname= Form("%s/histograms_Run%05d.root",
-                                     fnameoutfolder.c_str(),
-                                     runCount);
+            string fileoutname = "";
+            if(config.getBool("redpix_output")) {
+                fileoutname= Form("%s/digi_Run%05d.root",
+                                  fnameoutfolder.c_str(),
+                                  runCount);
+            } else {
+                fileoutname= Form("%s/histograms_Run%05d.root",
+                                  fnameoutfolder.c_str(),
+                                  runCount);
+            }
     
     
             auto outfile = shared_ptr<TFile> {TFile::Open(fileoutname.c_str(),
@@ -544,8 +579,16 @@ void DigitizationRunner::processRootFiles() {
             Float_t z_min_cut = -1;
             Float_t z_max_cut = -1;
             Float_t proj_track_2D_cut = -1;
+
+            int nRedpix;
                 
-            auto outtree = new TTree("event_info", "event_info");
+            // Smart pointer declarations
+            std::unique_ptr<std::vector<uint16_t>> redpix_ix = std::make_unique<std::vector<uint16_t>>();
+            std::unique_ptr<std::vector<uint16_t>> redpix_iy = std::make_unique<std::vector<uint16_t>>();
+            std::unique_ptr<std::vector<uint16_t>> redpix_iz = std::make_unique<std::vector<uint16_t>>();
+            
+            // ROOT TTree
+            auto outtree = std::make_unique<TTree>("event_info", "event_info");
                 
             outtree->Branch("eventnumber", &eventnumber_out, "eventnumber/I");
             outtree->Branch("particle_type", &particle_type_out, "particle_type/I");
@@ -583,13 +626,21 @@ void DigitizationRunner::processRootFiles() {
                 outtree->Branch("z_max_cut", &z_max_cut, "z_max_cut/F");
                 outtree->Branch("proj_track_2D_cut", &proj_track_2D_cut, "proj_track_2D_cut/F");
             }
+            // Create branches for redpixes
+            outtree->Branch("nRedpix", &nRedpix, "nRedpix/I");
+            outtree->Branch("redpix_ix", redpix_ix.get());
+            outtree->Branch("redpix_iy", redpix_iy.get());
+            outtree->Branch("redpix_iz", redpix_iz.get());
 
             int start = firstentry + digipart * NMAX_EVENTS;
             int stop  = start + NMAX_EVENTS-1;
             if(stop >= lastentry) stop = lastentry;
             for(int entry = start; entry <= stop; entry++) { // RUNNING ON ENTRIES
-                cout<<"DEBUG: Digitizing entry "<<entry<<", digipart = "<<digipart<<"..."<<endl;
+                //cout<<"DEBUG: Digitizing entry "<<entry<<", digipart = "<<digipart<<"..."<<endl;
 
+                redpix_ix->clear();
+                redpix_iy->clear();
+                redpix_iz->clear();
                 
                 
                 inputtree->GetEntry(entry);
@@ -691,10 +742,15 @@ void DigitizationRunner::processRootFiles() {
                             final_image.SetBinContent(xx+1, yy+1, background[xx][yy]);
                         }
                     }
-                        
+
+                    // Make sure nRedpix matches
+                    nRedpix = redpix_ix->size();
+                    
                     outtree->Fill();
                     outfile->cd();
-                    final_image.Write();
+                    if(!config.getBool("redpix_output")) {
+                        final_image.Write();
+                    }
                     
                     continue;
                 }
@@ -936,10 +992,14 @@ void DigitizationRunner::processRootFiles() {
                                 final_image.SetBinContent(xx+1, yy+1, background[xx][yy]);
                             }
                         }
+                        // Make sure nRedpix matches
+                        nRedpix = redpix_ix->size();
                         
                         outtree->Fill();
                         outfile->cd();
-                        final_image.Write();
+                        if(!config.getBool("redpix_output")) {
+                            final_image.Write();
+                        }
                         
                         continue;
                     }
@@ -960,6 +1020,7 @@ void DigitizationRunner::processRootFiles() {
                                                         NR_flag,
                                                         array2d_Nph
                                                         );
+                    
                 } else {// no saturation
                     processTrack.computeWithoutSaturation(x_hits_tr,
                                                         y_hits_tr,
@@ -983,6 +1044,7 @@ void DigitizationRunner::processRootFiles() {
                                                 VignMap);
                 }
                 
+                FillRedpix(array2d_Nph, redpix_ix.get(), redpix_iy.get(), redpix_iz.get());
                 
                 if (config.getBool("exposure_time_effect")) { //cut the track post-smearing
                     if (randcut<readout_time) {
@@ -1080,10 +1142,16 @@ void DigitizationRunner::processRootFiles() {
                                 final_image_cut.SetBinContent(xx+1, yy+1, background[xx][yy]);
                             }
                         }
-                            
+                        
+                        // Make sure nRedpix matches
+                        nRedpix = redpix_ix->size();
+                        
                         outtree->Fill();
                         outfile->cd();
-                        final_image_cut.Write();
+                        if(!config.getBool("redpix_output")) {
+                            final_image_cut.Write();
+                        }
+                        
                             
                         continue;
                     }
@@ -1145,19 +1213,27 @@ void DigitizationRunner::processRootFiles() {
                 std::chrono::duration<double> durtmp=tb-ta;
                 cout << "Time taken in seconds to compute_cmos_with_saturation is: " << durtmp.count() << endl;
                     
-                    
+                // Make sure nRedpix matches
+                nRedpix = redpix_ix->size();
+                
                 outtree->Fill();
                 outfile->cd();
-                
                 // DEBUG
-                final_image.Write();
+                if(!config.getBool("redpix_output")) {
+                    final_image.Write();
+                }
             }
             //outfile->cd("event_info");
             outtree->Write();
                 
             cout<<Form("COMPLETED RUN %d",runCount)<<endl;
-            
+
+            // Carefully closing the ROOT file
+            // N.B. this is strictly needed if redpix pointers are defines as smart pointers
+            outtree->ResetBranchAddresses(); // prevents ROOT from accessing deleted memory
+            outtree.reset(); // must destroy before redpix vectors are gone, i.e. before ending of current scope
             outfile->Close();
+            
             digipart ++;
             runCount ++;
             if(stop == lastentry) fileStillToDigitize = false;
