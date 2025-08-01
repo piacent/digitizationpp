@@ -376,8 +376,10 @@ void DigitizationRunner::FillRedpix(const std::vector<std::vector<double>>& imag
         for (int iy = 0; iy < nCols; ++iy) {
             double content = image[ix][iy];
             if (content != 0.0) {
-                redpix_ix->push_back(static_cast<uint16_t>(ix));
-                redpix_iy->push_back(static_cast<uint16_t>(iy));
+                // N.B. the repix definition of x and y in the reco is physical, so they
+                // must be swapped here
+                redpix_ix->push_back(static_cast<uint16_t>(iy));
+                redpix_iy->push_back(static_cast<uint16_t>(ix));
                 redpix_iz->push_back(static_cast<uint16_t>(content));
                 
             }
@@ -385,11 +387,6 @@ void DigitizationRunner::FillRedpix(const std::vector<std::vector<double>>& imag
     }
     return;
 }
-
-
-
-
-
 
 // ================================================================================================
 // ================================================================================================
@@ -584,11 +581,14 @@ void DigitizationRunner::processRootFiles() {
             Float_t proj_track_2D_cut = -1;
 
             int nRedpix;
-            vector<uint16_t>*   redpix_ix = new vector<uint16_t>();
-            vector<uint16_t>*   redpix_iy = new vector<uint16_t>();
-            vector<uint16_t>*   redpix_iz = new vector<uint16_t>();
                 
-            auto outtree = new TTree("event_info", "event_info");
+            // Smart pointer declarations
+            std::unique_ptr<std::vector<uint16_t>> redpix_ix = std::make_unique<std::vector<uint16_t>>();
+            std::unique_ptr<std::vector<uint16_t>> redpix_iy = std::make_unique<std::vector<uint16_t>>();
+            std::unique_ptr<std::vector<uint16_t>> redpix_iz = std::make_unique<std::vector<uint16_t>>();
+            
+            // ROOT TTree
+            auto outtree = std::make_unique<TTree>("event_info", "event_info");
                 
             outtree->Branch("eventnumber", &eventnumber_out, "eventnumber/I");
             outtree->Branch("particle_type", &particle_type_out, "particle_type/I");
@@ -628,9 +628,9 @@ void DigitizationRunner::processRootFiles() {
             }
             // Create branches for redpixes
             outtree->Branch("nRedpix", &nRedpix, "nRedpix/I");
-            outtree->Branch("redpix_ix", &redpix_ix);
-            outtree->Branch("redpix_iy", &redpix_iy);
-            outtree->Branch("redpix_iz", &redpix_iz);
+            outtree->Branch("redpix_ix", redpix_ix.get());
+            outtree->Branch("redpix_iy", redpix_iy.get());
+            outtree->Branch("redpix_iz", redpix_iz.get());
 
             int start = firstentry + digipart * NMAX_EVENTS;
             int stop  = start + NMAX_EVENTS-1;
@@ -1044,7 +1044,7 @@ void DigitizationRunner::processRootFiles() {
                                                 VignMap);
                 }
                 
-                FillRedpix(array2d_Nph, redpix_ix, redpix_iy, redpix_iz);
+                FillRedpix(array2d_Nph, redpix_ix.get(), redpix_iy.get(), redpix_iz.get());
                 
                 if (config.getBool("exposure_time_effect")) { //cut the track post-smearing
                     if (randcut<readout_time) {
@@ -1227,8 +1227,13 @@ void DigitizationRunner::processRootFiles() {
             outtree->Write();
                 
             cout<<Form("COMPLETED RUN %d",runCount)<<endl;
-            
+
+            // Carefully closing the ROOT file
+            // N.B. this is strictly needed if redpix pointers are defines as smart pointers
+            outtree->ResetBranchAddresses(); // prevents ROOT from accessing deleted memory
+            outtree.reset(); // must destroy before redpix vectors are gone, i.e. before ending of current scope
             outfile->Close();
+            
             digipart ++;
             runCount ++;
             if(stop == lastentry) fileStillToDigitize = false;
