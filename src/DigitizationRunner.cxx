@@ -636,12 +636,11 @@ void DigitizationRunner::processRootFiles() {
             int stop  = start + NMAX_EVENTS-1;
             if(stop >= lastentry) stop = lastentry;
             for(int entry = start; entry <= stop; entry++) { // RUNNING ON ENTRIES
-                cout<<"DEBUG: Digitizing entry "<<entry<<", digipart = "<<digipart<<"..."<<endl;
-                if(config.getBool("redpix_output")) {
-                    redpix_ix->clear();
-                    redpix_iy->clear();
-                    redpix_iz->clear();
-                }
+                //cout<<"DEBUG: Digitizing entry "<<entry<<", digipart = "<<digipart<<"..."<<endl;
+
+                redpix_ix->clear();
+                redpix_iy->clear();
+                redpix_iz->clear();
                 
                 
                 inputtree->GetEntry(entry);
@@ -994,10 +993,7 @@ void DigitizationRunner::processRootFiles() {
                             }
                         }
                         // Make sure nRedpix matches
-                        if(config.getBool("redpix_output")) {
-                            
-                            nRedpix = redpix_ix->size();
-                        }
+                        nRedpix = redpix_ix->size();
                         
                         outtree->Fill();
                         outfile->cd();
