@@ -791,3 +791,151 @@ void TrackProcessor::TrackVignetting(vector<vector<double>>& image, int xpix, in
     
     return;
 }
+
+
+int TrackProcessor::ApplyExposureCut(vector<vector<double>>& image,
+                                      vector<double>& x_hits_tr,
+                                      vector<double>& y_hits_tr,
+                                      vector<double>& z_hits_tr,
+                                      vector<double>& energy_hits) {
+
+    
+    int row_cut = -1;
+    
+    //CUT TRACKS due to exposure of camera
+    double randcut = gRandom->Uniform(config.getDouble("exposure_time")+readout_time);
+    // DEBUG
+    //cout<<"DEBUG: randcut = "<<randcut<<endl;
+
+    if (randcut<readout_time) {
+                            
+        double y_cut_tmp = config.getDouble("y_dim") * (0.5 - randcut/readout_time);
+        
+        // Removing elements from x_hits_tr
+        x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
+            return y_hits_tr[&x-&*x_hits_tr.begin()] > y_cut_tmp;
+        }), x_hits_tr.end());
+        // Removing elements from z_hits_tr
+        z_hits_tr.erase(std::remove_if(z_hits_tr.begin(), z_hits_tr.end(), [&](const double& z) {
+            return y_hits_tr[&z-&*z_hits_tr.begin()] > y_cut_tmp;
+        }), z_hits_tr.end());
+        // Removing elements from energy_hits
+        energy_hits.erase(std::remove_if(energy_hits.begin(), energy_hits.end(), [&](const double& e) {
+            return y_hits_tr[&e-&*energy_hits.begin()] > y_cut_tmp;
+        }), energy_hits.end());
+        // Removing elements from y_hits_tr [must be done after the previous ones]
+        y_hits_tr.erase(std::remove_if(y_hits_tr.begin(), y_hits_tr.end(),[&](const double& y) {
+            return y > y_cut_tmp;
+        }), y_hits_tr.end());
+            
+        row_cut = (int)(randcut * static_cast<double>(y_pix) / readout_time);
+
+        for(int ix = 0; ix < (int)image.size(); ix++) {
+            for(int iy = 0; iy < (int)image[0].size(); iy++) {
+                if(iy > row_cut) {
+                    image[ix][iy] = 0.0;
+                }
+            }
+        }
+ 
+    } else if (randcut>config.getDouble("exposure_time")) {
+        double y_cut_tmp = config.getDouble("y_dim") * (0.5 - (randcut - config.getDouble("exposure_time")) / readout_time);
+        
+        // Removing elements from x_hits_tr
+        x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
+            return y_hits_tr[&x-&*x_hits_tr.begin()] < y_cut_tmp;
+        }), x_hits_tr.end());
+        // Removing elements from z_hits_tr
+        z_hits_tr.erase(std::remove_if(z_hits_tr.begin(), z_hits_tr.end(), [&](const double& z) {
+            return y_hits_tr[&z-&*z_hits_tr.begin()] < y_cut_tmp;
+        }), z_hits_tr.end());
+        // Removing elements from energy_hits
+        energy_hits.erase(std::remove_if(energy_hits.begin(), energy_hits.end(), [&](const double& e) {
+            return y_hits_tr[&e-&*energy_hits.begin()] < y_cut_tmp;
+        }), energy_hits.end());
+            
+        // Removing elements from y_hits_tr [must be done after the previous ones]
+        y_hits_tr.erase(std::remove_if(y_hits_tr.begin(), y_hits_tr.end(),[&](const double& y) {
+            return y < y_cut_tmp;
+        }), y_hits_tr.end());
+        
+        row_cut = (int)((randcut-config.getDouble("exposure_time")) * static_cast<double>(y_pix) / readout_time);
+
+        for(int ix = 0; ix < (int)image.size(); ix++) {
+            for(int iy = 0; iy < (int)image[0].size(); iy++) {
+                if(iy < row_cut) {
+                    image[ix][iy] = 0.0;
+                }
+            }
+        }
+
+    }
+    
+    // DEBUG
+    //cout<<"DEBUG: row_cut  = "<<row_cut<<endl;
+    return row_cut;
+}
+
+
+
+double TrackProcessor::GetTrackVariable(const std::string& varname,
+                                        std::vector<double>& x_hits_tr,
+                                        std::vector<double>& y_hits_tr,
+                                        std::vector<double>& z_hits_tr) {
+    double ret = -1.0;
+    int numhits = (int)x_hits_tr.size();
+
+    int varcode = varname_map[varname];
+
+    switch (varcode) {
+        case 0: { // proj_track_2D
+            double proj_track_2D = 0;
+            for (int i = 0; i < numhits - 1; ++i) {
+                proj_track_2D += std::hypot(x_hits_tr[i + 1] - x_hits_tr[i],
+                                            y_hits_tr[i + 1] - y_hits_tr[i]);
+            }
+            ret = proj_track_2D;
+            break;
+        }
+        case 1: // x_vertex
+            ret = (x_hits_tr[0] + 0.5 * config.getDouble("x_dim")) * static_cast<double>(x_pix) / config.getDouble("x_dim");
+            break;
+        case 2: // y_vertex
+            ret = (y_hits_tr[0] + 0.5 * config.getDouble("y_dim")) * static_cast<double>(y_pix) / config.getDouble("y_dim");
+            break;
+        case 3: // z_vertex
+            ret = z_hits_tr[0];
+            break;
+        case 4: // x_vertex_end
+            ret = (x_hits_tr[numhits - 1] + 0.5 * config.getDouble("x_dim")) * static_cast<double>(x_pix) / config.getDouble("x_dim");
+            break;
+        case 5: // y_vertex_end
+            ret = (y_hits_tr[numhits - 1] + 0.5 * config.getDouble("y_dim")) * static_cast<double>(y_pix) / config.getDouble("y_dim");
+            break;
+        case 6: // z_vertex_end
+            ret = z_hits_tr[numhits - 1];
+            break;
+        case 7: // x_min
+            ret = (*std::min_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * config.getDouble("x_dim")) * static_cast<double>(x_pix) / config.getDouble("x_dim");
+            break;
+        case 8: // x_max
+            ret = (*std::max_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * config.getDouble("x_dim")) * static_cast<double>(x_pix) / config.getDouble("x_dim");
+            break;
+        case 9: // y_min
+            ret = (*std::min_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * config.getDouble("y_dim")) * static_cast<double>(y_pix) / config.getDouble("y_dim");
+            break;
+        case 10: // y_max
+            ret = (*std::max_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * config.getDouble("y_dim")) * static_cast<double>(y_pix) / config.getDouble("y_dim");
+            break;
+        case 11: // z_min
+            ret = (*std::min_element(z_hits_tr.begin(), z_hits_tr.end()));
+            break;
+        case 12: // z_max
+            ret = (*std::max_element(z_hits_tr.begin(), z_hits_tr.end()));
+            break;
+        default:
+            throw std::logic_error("Unhandled varname_map code: " + std::to_string(varcode));
+    }
+
+    return ret;
+}

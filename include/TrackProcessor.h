@@ -76,6 +76,39 @@ public:
      */
     void TrackVignetting(std::vector<std::vector<double>>& image, int xpix, int ypix, const TH2F& VignMap);
 
+
+    /**
+     * @brief Applies exposure cut to digitized image and hits
+     *
+     * @param[in] image 2D image filled with the simulated event without pedestal
+     * @param[in] x_hits_tr Vector of x coordinates of energy deposits.
+     * @param[in] y_hits_tr Vector of y coordinates of energy deposits.
+     * @param[in] z_hits_tr Vector of z coordinates of energy deposits.
+     * @param[in] energy_hits_tr Energy deposited at each hit.
+     *
+     * @return The row of the image at which the cut happens
+     */
+    int ApplyExposureCut(std::vector<std::vector<double>>& image,
+                         std::vector<double>& x_hits_tr,
+                         std::vector<double>& y_hits_tr,
+                         std::vector<double>& z_hits_tr,
+                         std::vector<double>& energy_hits_tr);
+
+    /**
+     * @brief Get track variables  from variable name
+     *
+     * @param[in] varname Name of the variable to retrieve.
+     * @param[in] x_hits_tr Vector of x coordinates of energy deposits.
+     * @param[in] y_hits_tr Vector of y coordinates of energy deposits.
+     * @param[in] z_hits_tr Vector of z coordinates of energy deposits.
+     *
+     * @return The track variable specified as an input
+     */
+     double GetTrackVariable(const std::string& varname,
+                             std::vector<double>& x_hits_tr,
+                             std::vector<double>& y_hits_tr,
+                             std::vector<double>& z_hits_tr);
+
 private:
     ConfigManager& config; ///< Reference to configuration
 
@@ -172,6 +205,22 @@ private:
      * @return Saturated output value.
      */
     double Nph_saturation(int nel, double A, double beta);
+
+    std::map<std::string, int> varname_map = {
+        {"proj_track_2D",  0},
+        {"x_vertex",       1},
+        {"y_vertex",       2},
+        {"z_vertex",       3},
+        {"x_vertex_end",   4},
+        {"y_vertex_end",   5},
+        {"z_vertex_end",   6},
+        {"x_min",          7},
+        {"x_max",          8},
+        {"y_min",          9},
+        {"y_max",         10},
+        {"z_min",         11},
+        {"z_max",         12}
+    };
 
 
 
