@@ -206,6 +206,21 @@ private:
      */
     double Nph_saturation(int nel, double A, double beta);
 
+    /**
+    * @brief Maps string variable names to integer codes for track variable dispatch.
+    *
+    * This map is used to associate human-readable variable names (e.g., "x_vertex", "z_max")
+    * with unique integer codes. These codes are used in a switch-case structure to
+    * efficiently dispatch computation logic in the TrackProcessor::GetTrackVariable function.
+    *
+    * @note This structure allows converting slow if-else chains into fast integer-based
+    *       lookups and switch-case branching.
+    *
+    * Example:
+    * @code
+    * int varcode = varname_map["x_vertex"];  // Returns 1
+    * @endcode
+    */
     std::map<std::string, int> varname_map = {
         {"proj_track_2D",  0},
         {"x_vertex",       1},
