@@ -82,6 +82,15 @@ and the outdir will be created in
 
 Depending on the system, the outdir folder creation may fail. In that case create the output directory.
 
+The code supports the possibility of generating, via the flag `redpix_output` in the config file, an output file that does not contain TH2I images, but just the redpix-equivalent of the digitised tracks (they are located in the `event_info` tree of the output file). If this is the case the output file will be named `digi_RunXXXXX.root` - instead of the usual `histograms_RunXXXXX.root` convention. In order to generate a `histograms_RunXXXXX.root` file from the `digi_RunXXXXX.root` file (e.g. if you want to reconstruct digitized events), you should run the `joinPeds` executable - which is automatically compiled and generated in the same directory of `digitizationpp` if you followed the installation instructions reported above - with the following suggested usage:
+
+`./<path_to_build-dir>/joinPeds <path_to_digitizationpp-dir>/config/ConfigFile_new.txt -I <path_to_digi_Run_folder> -O <path_to_output_folder>`
+
+As for `digitizationpp`, if not existing, the Outdir will be created. The -I and -O options can be droppped and the code will search `digi_RunXXXXX.root` input files in
+`<path_to_digitizationpp-dir>/OutDir/`
+and the outdir will be created in 
+`<path_to_digitizationpp-dir>/OutDir/`
+
 ## Digitization reference frame
 
 The reference frame (RF) used in digitization is the following:

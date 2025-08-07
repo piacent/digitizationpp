@@ -45,6 +45,11 @@ public:
      */
     void run();
 
+    /**
+     * @brief Executes the addition of random pedestals to input "digi_RunXXXXX.root" file.
+     */
+     void runPedsOnly();
+
 private:
 
     /**
@@ -73,7 +78,35 @@ private:
       * @return True if valid, false otherwise.
       */
      bool isValidInputFile(const std::string& filename) const;
- 
+    
+     /**
+     * @brief Checks if the input filename matches the expected digi file format.
+     *
+     * Validates whether the provided filename follows the naming convention:
+     * `digi_RunXXXXX.root`, where `XXXXX` is a number with 5 or more digits.
+     *
+     * @param[in] filename The name of the file to validate.
+     * @return true if the filename matches the expected format; false otherwise.
+     *
+     * @note This check uses a regular expression internally.
+     */
+     bool isValidDigiFile(const std::string& filename) const;
+
+     /**
+     * @brief Extracts the run number from a digi file name.
+     *
+     * Parses a filename of the form `digi_RunXXXXX.root` and extracts the numeric
+     * run number (where `XXXXX` is a number with 5 or more digits).
+     *
+     * @param[in] filename The digi file name to parse.
+     * @return The extracted run number as an integer.
+     *
+     * @throws std::invalid_argument if the filename does not match the expected format.
+     *
+     * @see isValidDigiFile() to validate the filename before calling this.
+     */
+     int extractDigiRunNumber(const std::string& filename);
+
      /**
       * @brief Sets the random seed for reproducibility.
       * @param[in] seed Seed value (default is 10).
@@ -124,6 +157,22 @@ private:
      void AddBckg(std::vector<std::vector<int>>& background);
 
      /**
+     * @brief Adds pedestal histograms to the "param_dir" directory of the output ROOT file.
+     *
+     * This function assumes that the output ROOT file (`outfile`) already contains a
+     * directory named "param_dir", and that this directory holds existing TH1 histograms.
+     * It adds pedestal run numbers to `pedestal_runs` TH1F.
+     *
+     *
+     * @param[in] outfile A shared pointer to the output ROOT file where the histograms
+     *                    will be modified or augmented.
+     *
+     * @note This function modifies the ROOT file in-place, and the changes are saved
+     *       directly into `outfile`.
+     */
+     void addPedsToParamDir(std::shared_ptr<TFile>& outfile);
+
+     /**
      * @brief Parses a MC axis label string and returns the corresponding digititazion axis and sign.
      *
      * This function interprets a string like "x", "-y", or "z" to determine which
@@ -163,6 +212,19 @@ private:
                      std::vector<uint16_t>* redpix_ix,
                      std::vector<uint16_t>* redpix_iy,
                      std::vector<uint16_t>* redpix_iz);
+
+    /**
+     * @brief Generates TH2I from a digi ROOT file.
+     *
+     * This function processes a ROOT file named `digi_RunXXXXX.root`, where `XXXXX`
+     * represents the run number, and creates a new output ROOT file called
+     * `histograms_RunXXXXX.root`. The output file contains TH2F histograms that
+     * visualize the tracks recorded in the input digi file.
+     *
+     * @note The function assumes the input file follows the naming convention
+     *       `digi_RunXXXXX.root` and outputs histograms accordingly.
+     */
+     void generateHistogramsFromDigi();
  
      ConfigManager config;           ///< Configuration manager
      std::string configFile;         ///< Path to the config file

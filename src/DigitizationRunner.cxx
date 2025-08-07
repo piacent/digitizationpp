@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <limits.h>
 #include <utility>
+#include <regex>
 #include "TRandom3.h"
 #include "TFile.h"
 #include "TTree.h"
@@ -77,6 +78,18 @@ void DigitizationRunner::run() {
     cout << "Total digitization time: " << dur.count() << " seconds" << endl;
 }
 
+void DigitizationRunner::runPedsOnly() {
+    auto t0 = std::chrono::steady_clock::now();
+
+    setSeed();
+
+    generateHistogramsFromDigi();
+
+    auto t1 = std::chrono::steady_clock::now();
+    std::chrono::duration<double> dur = t1 - t0;
+    cout << "Total joinPeds time: " << dur.count() << " seconds" << endl;
+}
+
 void DigitizationRunner::initializeGlobals() {
     GEM1_gain = 0.03 * exp(0.0209 * config.getDouble("GEM1_HV"));
     GEM2_gain = 0.03 * exp(0.0209 * config.getDouble("GEM2_HV"));
@@ -132,6 +145,26 @@ bool DigitizationRunner::isValidInputFile(const std::string& filename) const {
         return true;
     }
     return false;
+}
+
+bool DigitizationRunner::isValidDigiFile(const std::string& filename) const {
+    // Match: starts with "digi_Run", followed by 5 or more digits, ending in ".root"
+    string base = std::filesystem::path(filename).filename().string();
+    std::regex pattern(R"(digi_Run\d{5,}\.root)");
+
+    return regex_match(base, pattern);
+}
+
+int DigitizationRunner::extractDigiRunNumber(const std::string& filename) {
+    string base = std::filesystem::path(filename).filename().string();
+    std::smatch match;
+    std::regex pattern(R"(digi_Run(\d{5,})\.root)");
+
+    if (std::regex_match(base, match, pattern)) {
+        return std::stoi(match[1]);  // match[1] contains the run number
+    } else {
+        throw std::invalid_argument("Invalid filename format: " + filename);
+    }
 }
 
 void DigitizationRunner::setSeed(int seed) {
@@ -275,77 +308,109 @@ bool DigitizationRunner::is_NR(vector<int> pdgID_hits, int pdg) {
 
 
 void DigitizationRunner::AddBckg(std::vector<std::vector<int>>& background) {
-
-    if(config.getBool("bckg")) {
         
-        string tmpfolder = config.get("bckg_path");
-        string tmpname   = config.get("bckg_name");
-        
-        if(! filesystem::exists(tmpfolder)){
-            //DEBUG
-            cout<<"Creating tmpfolder..."<<
-            system(("mkdir " + tmpfolder).c_str() );
-        }
-        
-        if(! filesystem::exists(tmpfolder+tmpname)) {
-            
-            vector<int> pedruns;
-            
-            stringstream ssruns(config.get("noiserun"));
-            string run;
-            vector<string> seglist;
-            while(getline(ssruns, run, ';')) {
-                int runi = stoi(run);
-                pedruns.push_back(runi);
-            }
-            
-            cygnolib::joinMidasPedestals(pedruns, config.get("ped_cloud_dir"), tmpfolder, tmpname);
-            
-        }
-        
-        auto fin = unique_ptr<TFile> {TFile::Open((tmpfolder+tmpname).c_str())};
-
-        // Computing number of images in root file
-        int flength = 0;
-        for (auto&& keyAsObj : *(fin->GetListOfKeys())){
-            if(false) cout<<keyAsObj<<endl; //just to avoid a warning in the compilation
-            flength++;
-        }
-        // Check if pedestal root file has events
-        if(flength==0) {
-            throw runtime_error("AddBkg: pedestal root file with no events. Please rm "+tmpfolder+tmpname+" before re-running.");
-        }
-        
-        int pic_index = 0;
-        if(config.getInt("random_ped")==-1) pic_index = gRandom->Integer(flength);
-        else pic_index = config.getInt("random_ped");
-        
-        cout<<"Using pic # "<<pic_index<<" out of "<<flength<<" as a pedestal..."<<endl;
-        TH2I* pic = fin->Get<TH2I>(Form("pic_%d", pic_index));
-
-        int x_ped=pic->GetNbinsX();
-        int y_ped=pic->GetNbinsY();
-        //Check pedestal and simulation have same camera settings
-        if(x_ped!=y_ped) {
-            if(x_pix==y_pix) {
-                cerr<<"You are using a Quest pedestal map with a Fusion simulation! Digitization FAILED!\n";
-                exit(0);
-            }
-        } else {
-            if(x_pix!=y_pix) {
-                cerr<<"You are using a Fusion pedestal map with a Quest simulation! Digitization FAILED!\n";
-                exit(0);
-            }
-        }
-
-        for(int i = 0; i<pic->GetNbinsX(); i++) {
-            for (int j =0; j<pic->GetNbinsY(); j++) {
-                background[i][j] = pic->GetBinContent(i+1,j+1);
-                //cout<<background[i][j]<<endl; // DEBUG
-            }
-        }
-
+    string tmpfolder = config.get("bckg_path");
+    string tmpname   = config.get("bckg_name");
+    
+    if(! filesystem::exists(tmpfolder)){
+        //DEBUG
+        cout<<"Creating tmpfolder..."<<
+        system(("mkdir " + tmpfolder).c_str() );
     }
+        
+    if(! filesystem::exists(tmpfolder+tmpname)) {
+        
+        vector<int> pedruns;
+        
+        stringstream ssruns(config.get("noiserun"));
+        string run;
+        vector<string> seglist;
+        while(getline(ssruns, run, ';')) {
+            int runi = stoi(run);
+            pedruns.push_back(runi);
+        }
+        
+        cygnolib::joinMidasPedestals(pedruns, config.get("ped_cloud_dir"), tmpfolder, tmpname);
+        
+    }
+        
+    auto fin = unique_ptr<TFile> {TFile::Open((tmpfolder+tmpname).c_str())};
+
+    // Computing number of images in root file
+    int flength = 0;
+    for (auto&& keyAsObj : *(fin->GetListOfKeys())){
+        if(false) cout<<keyAsObj<<endl; //just to avoid a warning in the compilation
+        flength++;
+    }
+    // Check if pedestal root file has events
+    if(flength==0) {
+        throw runtime_error("AddBckg: pedestal root file with no events. Please rm "+tmpfolder+tmpname+" before re-running.");
+    }
+        
+    int pic_index = 0;
+    if(config.getInt("random_ped")==-1) pic_index = gRandom->Integer(flength);
+    else pic_index = config.getInt("random_ped");
+    
+    cout<<"Using pic # "<<pic_index<<" out of "<<flength<<" as a pedestal..."<<endl;
+    TH2I* pic = fin->Get<TH2I>(Form("pic_%d", pic_index));
+
+    int x_ped=pic->GetNbinsX();
+    int y_ped=pic->GetNbinsY();
+    //Check pedestal and simulation have same camera settings
+    if(x_ped!=y_ped) {
+        if(x_pix==y_pix) {
+            cerr<<"You are using a Quest pedestal map with a Fusion simulation! Digitization FAILED!\n";
+            exit(0);
+        }
+    } else {
+        if(x_pix!=y_pix) {
+            cerr<<"You are using a Fusion pedestal map with a Quest simulation! Digitization FAILED!\n";
+            exit(0);
+        }
+    }
+
+    for(int i = 0; i<pic->GetNbinsX(); i++) {
+        for (int j =0; j<pic->GetNbinsY(); j++) {
+            background[i][j] = pic->GetBinContent(i+1,j+1);
+            //cout<<background[i][j]<<endl; // DEBUG
+        }
+    }
+    
+    return;
+}
+
+void DigitizationRunner::addPedsToParamDir(shared_ptr<TFile>& outfile) {
+    outfile->cd();
+    outfile->cd("param_dir");
+
+    string histname = "pedestal_runs";
+    // TH1F* hist = dynamic_cast<TH1F*>(file->Get(histname.c_str()));
+    // if (!hist) {
+    //     std::cerr << "Histogram not found: " << "pedestal_runs" << std::endl;
+    //     outfile->Close();
+    //     return;
+    // }
+    // Remove old histogram from directory
+    outfile->Delete((histname + ";*").c_str());  // Delete all versions of the histogram
+
+    // Get pedrun numbers from config file
+    std::vector<int> pedruns;
+    stringstream ssruns(config.get("noiserun"));
+    string run;
+    vector<string> seglist;
+    while(getline(ssruns, run, ';')) {
+        int runi = stoi(run);
+        pedruns.push_back(runi);
+    }
+    int npeds = static_cast<int>(pedruns.size());
+
+    TH1F hnew("pedestal_runs","",npeds,0,npeds);
+    for (int i = 0; i < npeds; i++) {
+        hnew.SetBinContent(i+1, pedruns[i]);
+    }
+    hnew.Write();
+    outfile->cd();
+
     return;
 }
 
@@ -378,8 +443,8 @@ void DigitizationRunner::FillRedpix(const std::vector<std::vector<double>>& imag
             if (content != 0.0) {
                 // N.B. the repix definition of x and y in the reco is physical, so they
                 // must be swapped here
-                redpix_ix->push_back(static_cast<uint16_t>(iy));
-                redpix_iy->push_back(static_cast<uint16_t>(ix));
+                redpix_ix->push_back(static_cast<uint16_t>(ix));
+                redpix_iy->push_back(static_cast<uint16_t>(iy));
                 redpix_iz->push_back(static_cast<uint16_t>(content));
                 
             }
@@ -727,9 +792,11 @@ void DigitizationRunner::processRootFiles() {
     
     
                 vector<vector<int>> background(x_pix,
-                                                vector<int>(y_pix, 0));        
-                AddBckg(background);
-
+                                                vector<int>(y_pix, 0)); 
+                
+                if(config.getBool("bckg")) {
+                    AddBckg(background);
+                }
       
                 if (energy < config.getDouble("ion_pot")){
                     energy = 0;
@@ -759,6 +826,7 @@ void DigitizationRunner::processRootFiles() {
                 vector<double> y_hits_tr;
                 vector<double> z_hits_tr;
                 
+                // Coordinate transformation
 
                 if (config.getBool("SRIM")) {
                     // x_hits_tr = np.array(tree.x_hits) + opt.x_offset
@@ -863,9 +931,10 @@ void DigitizationRunner::processRootFiles() {
                 //    }
                 //}
                 
+                // Definition of energy hits
                 vector<double> energy_hits = (*energyDep_hits);
                     
-                // add random Z to tracks
+                // Add random Z to tracks
                 if (config.getDouble("randZ_range") != 0) {
                     double rand = (gRandom->Uniform() - 0.5) * config.getDouble("randZ_range");
                     //DEBUG
@@ -876,137 +945,27 @@ void DigitizationRunner::processRootFiles() {
                     
                 }
                 
-                //Compute length and extremes of the track before the cut
-                proj_track_2D = 0;
-                for(int ihit=0; ihit < numhits-1; ihit++){
-                    proj_track_2D += sqrt((x_hits_tr[ihit+1]-x_hits_tr[ihit])*(x_hits_tr[ihit+1]-x_hits_tr[ihit])+
-                                            (y_hits_tr[ihit+1]-y_hits_tr[ihit])*(y_hits_tr[ihit+1]-y_hits_tr[ihit])
-                                            );
-                }
-                // DEBUG
+                //Compute length and extremes of the complete track
+                proj_track_2D = processTrack.GetTrackVariable("proj_track_2D", x_hits_tr, y_hits_tr, z_hits_tr);
+                x_vertex      = processTrack.GetTrackVariable("x_vertex", x_hits_tr, y_hits_tr, z_hits_tr);
+                y_vertex      = processTrack.GetTrackVariable("y_vertex", x_hits_tr, y_hits_tr, z_hits_tr);
+                z_vertex      = processTrack.GetTrackVariable("z_vertex", x_hits_tr, y_hits_tr, z_hits_tr);
+                x_vertex_end  = processTrack.GetTrackVariable("x_vertex_end", x_hits_tr, y_hits_tr, z_hits_tr);
+                y_vertex_end  = processTrack.GetTrackVariable("y_vertex_end", x_hits_tr, y_hits_tr, z_hits_tr);
+                z_vertex_end  = processTrack.GetTrackVariable("z_vertex_end", x_hits_tr, y_hits_tr, z_hits_tr);
+                x_min = processTrack.GetTrackVariable("x_min", x_hits_tr, y_hits_tr, z_hits_tr);
+                x_max = processTrack.GetTrackVariable("x_max", x_hits_tr, y_hits_tr, z_hits_tr);
+                y_min = processTrack.GetTrackVariable("y_min", x_hits_tr, y_hits_tr, z_hits_tr);
+                y_max = processTrack.GetTrackVariable("y_max", x_hits_tr, y_hits_tr, z_hits_tr);
+                z_min = processTrack.GetTrackVariable("z_min", x_hits_tr, y_hits_tr, z_hits_tr);
+                z_max = processTrack.GetTrackVariable("z_max", x_hits_tr, y_hits_tr, z_hits_tr);
+                //DEBUG
                 //cout<<"proj_track_2D = "<<Form("%.10f", proj_track_2D)<<endl;
-                    
-                    
-                x_vertex = (x_hits_tr[0] + 0.5 * config.getDouble("x_dim") )*static_cast<double>(x_pix)/config.getDouble("x_dim"); //in pixels
-                y_vertex = (y_hits_tr[0] + 0.5 * config.getDouble("y_dim") )*static_cast<double>(y_pix)/config.getDouble("y_dim"); //in pixels
-                z_vertex = (z_hits_tr[0]+config.getDouble("z_extra")); //distance from GEMs in mm
-                // DEBUG
                 //cout<<"x_vertex = "<<x_vertex<<" ### y_vertex = "<<y_vertex<<" ### z_vertex = "<<z_vertex<<endl;
-                    
-                x_vertex_end = (x_hits_tr[numhits-1] + 0.5 * config.getDouble("x_dim")) * static_cast<double>(x_pix) / config.getDouble("x_dim"); //in pixels
-                y_vertex_end = (y_hits_tr[numhits-1] + 0.5 * config.getDouble("y_dim")) * static_cast<double>(y_pix) / config.getDouble("y_dim"); //in pixels
-                z_vertex_end = (z_hits_tr[numhits-1]+config.getDouble("z_extra")); //distance from GEMs in mm
-                //DEBUG
                 //cout<<"x_vertex_end = "<<x_vertex_end<<" ### y_vertex_end = "<<y_vertex_end<<" ### z_vertex_end = "<<z_vertex_end<<endl;
-                    
-                x_min = (*min_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * config.getDouble("x_dim")) * static_cast<double>(x_pix) / config.getDouble("x_dim");
-                x_max = (*max_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * config.getDouble("x_dim")) * static_cast<double>(x_pix) / config.getDouble("x_dim");
-                y_min = (*min_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * config.getDouble("y_dim")) * static_cast<double>(y_pix) / config.getDouble("y_dim");
-                y_max = (*max_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * config.getDouble("y_dim")) * static_cast<double>(y_pix) / config.getDouble("y_dim");
-                z_min = min((*max_element(z_hits_tr.begin(),
-                                                z_hits_tr.end()) + config.getDouble("z_extra")),
-                            (*min_element(z_hits_tr.begin(),
-                                                z_hits_tr.end()) + config.getDouble("z_extra")));
-                z_max = max((*max_element(z_hits_tr.begin(),
-                                                z_hits_tr.end()) + config.getDouble("z_extra")),
-                            (*min_element(z_hits_tr.begin(),
-                                                z_hits_tr.end()) + config.getDouble("z_extra")));
-                //DEBUG
                 //cout<<" x_min = "<<x_min<<" x_max = "<<x_max<<" y_min = "<<y_min<<" y_max = "<<y_max<<" z_min = "<<z_min<<" z_max = "<<z_max<<endl;
-                
-                
-                //CUT TRACKS due to exposure of camera
-                double randcut = gRandom->Uniform(config.getDouble("exposure_time")+readout_time);
-                //randcut = 390.0;
                     
-                if (config.getBool("exposure_time_effect")) {
-                    if (randcut<readout_time) {
-                            
-                        double y_cut_tmp = config.getDouble("y_dim") * (0.5 - randcut/readout_time)-3.;
-                        
-                        // Removing elements from x_hits_tr
-                        x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
-                            return y_hits_tr[&x-&*x_hits_tr.begin()] < y_cut_tmp;
-                        }), x_hits_tr.end());
-                        // Removing elements from z_hits_tr
-                        z_hits_tr.erase(std::remove_if(z_hits_tr.begin(), z_hits_tr.end(), [&](const double& z) {
-                            return y_hits_tr[&z-&*z_hits_tr.begin()] < y_cut_tmp;
-                        }), z_hits_tr.end());
-                        // Removing elements from energy_hits
-                        energy_hits.erase(std::remove_if(energy_hits.begin(), energy_hits.end(), [&](const double& e) {
-                            return y_hits_tr[&e-&*energy_hits.begin()] < y_cut_tmp;
-                        }), energy_hits.end());
-                            
-                        // Removing elements from y_hits_tr [must be done after the previous ones]
-                        y_hits_tr.erase(std::remove_if(y_hits_tr.begin(), y_hits_tr.end(),[&](const double& y) {
-                            return y < y_cut_tmp;
-                        }), y_hits_tr.end());
-                            
-                        row_cut = y_pix - (int)(randcut * static_cast<double>(y_pix) / readout_time);
-                            
-                        //DEBUG
-                        //cout<<"y_cut_tmp = "<<y_cut_tmp<<endl;
-                        //cout<<"row_cut = "<<row_cut<<endl;
-                        //cout<<"sizes = ["<< x_hits_tr.size()<<","<<y_hits_tr.size()<<","
-                        //    <<z_hits_tr.size()<<","<<energy_hits.size()<<"]"<<endl;
-                        
-                    } else if (randcut>config.getDouble("exposure_time")) {
-                        double y_cut_tmp = config.getDouble("y_dim") * (0.5 - (randcut - config.getDouble("exposure_time")) / readout_time)+3.;
-                            
-                        // Removing elements from x_hits_tr
-                        x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
-                            return y_hits_tr[&x-&*x_hits_tr.begin()] > y_cut_tmp;
-                        }), x_hits_tr.end());
-                        // Removing elements from z_hits_tr
-                        z_hits_tr.erase(std::remove_if(z_hits_tr.begin(), z_hits_tr.end(), [&](const double& z) {
-                            return y_hits_tr[&z-&*z_hits_tr.begin()] > y_cut_tmp;
-                        }), z_hits_tr.end());
-                        // Removing elements from energy_hits
-                        energy_hits.erase(std::remove_if(energy_hits.begin(), energy_hits.end(), [&](const double& e) {
-                            return y_hits_tr[&e-&*energy_hits.begin()] > y_cut_tmp;
-                        }), energy_hits.end());
-                            
-                        // Removing elements from y_hits_tr [must be done after the previous ones]
-                        y_hits_tr.erase(std::remove_if(y_hits_tr.begin(), y_hits_tr.end(),[&](const double& y) {
-                            return y > y_cut_tmp;
-                        }), y_hits_tr.end());
-                        
-                        row_cut = y_pix - (int)((randcut-config.getDouble("exposure_time")) * static_cast<double>(y_pix) / readout_time);
-                        
-                        //DEBUG
-                        //cout<<"y_cut_tmp = "<<y_cut_tmp<<endl;
-                        //cout<<"row_cut = "<<row_cut<<endl;
-                        //cout<<"sizes = ["<< x_hits_tr.size()<<","<<y_hits_tr.size()<<","
-                        //    <<z_hits_tr.size()<<","<<energy_hits.size()<<"]"<<endl;
-                    
-                    }
-                    if(x_hits_tr.size()==0){
-                        cut_energy = 0;
-                        cout<<"The track was completely cut"<<endl;
-                        TH2I final_image(Form("pic_run%d_ev%d", runCount, entry-start), "",
-                                            x_pix, -0.5, x_pix -0.5,
-                                            y_pix, -0.5, y_pix -0.5);
-                        
-                        for(unsigned int xx =0; xx < background.size(); xx++) {
-                            for(unsigned int yy =0; yy < background[0].size(); yy++) {
-                                final_image.SetBinContent(xx+1, yy+1, background[xx][yy]);
-                            }
-                        }
-                        // Make sure nRedpix matches
-                        nRedpix = redpix_ix->size();
-                        
-                        outtree->Fill();
-                        outfile->cd();
-                        if(!config.getBool("redpix_output")) {
-                            final_image.Write();
-                        }
-                        
-                        continue;
-                    }
-                }
-                    
-                vector<vector<double>> array2d_Nph(x_pix,
-                                                    vector<double>(y_pix, 0.0));
+                vector<vector<double>> array2d_Nph(x_pix, vector<double>(y_pix, 0.0));
                 
                 auto ta = std::chrono::steady_clock::now();
                 // with saturation
@@ -1029,8 +988,13 @@ void DigitizationRunner::processRootFiles() {
                                                         array2d_Nph
                                                         );
                 }
+
+                auto tb = std::chrono::steady_clock::now();
+                std::chrono::duration<double> durtmp=tb-ta;
+                cout << "Time taken in seconds to compute_cmos_with_saturation is: " << durtmp.count() << endl;
                 
-                // Integral of the track - if opt.exposure_effect, it's computed anyway after the cut on the original hits (to save time we digitize only the part that will be visible)
+
+                // Integral of the track - if opt.exposure_effect, it's computed anyway after the cut on the original hits
                 N_photons = accumulate(array2d_Nph.cbegin(), array2d_Nph.cend(), 0, [](auto sum, const auto& row) {
                     return accumulate(row.cbegin(), row.cend(), sum);
                 });
@@ -1044,148 +1008,53 @@ void DigitizationRunner::processRootFiles() {
                                                 VignMap);
                 }
                 
+                // Compute always redpix, before possible track cut by exposure of sensor
                 FillRedpix(array2d_Nph, redpix_ix.get(), redpix_iy.get(), redpix_iz.get());
                 
-                if (config.getBool("exposure_time_effect")) { //cut the track post-smearing
-                    if (randcut<readout_time) {
-                        for(unsigned int xx=0; xx < array2d_Nph.size(); xx++) {
-                            for(int yy=0; yy < row_cut; yy++) {
-                                array2d_Nph[xx][yy] = 0.0;
-                            }
-                        }
-                    } else if(randcut> config.getDouble("exposure_time") ) {
-                        for(unsigned int xx=0; xx < array2d_Nph.size(); xx++) {
-                            for(int yy=row_cut; yy < (int)array2d_Nph[0].size(); yy++) {
-                                array2d_Nph[xx][yy] = 0.0;
-                            }
-                        }
-                    }
-                        
-                    //integral after camera exposure cut
+                if (config.getBool("exposure_time_effect")) {
+                    // Cut image and hits
+                    row_cut = processTrack.ApplyExposureCut(array2d_Nph,
+                                                            x_hits_tr,
+                                                            y_hits_tr,
+                                                            z_hits_tr,
+                                                            energy_hits);
+
+                    // Integral after camera exposure cut
                     N_photons_cut = accumulate(array2d_Nph.cbegin(),
                                                 array2d_Nph.cend(), 0, [](auto sum, const auto& row) {
                         return accumulate(row.cbegin(), row.cend(), sum);
                     });
+
+                    // Energy after camera exposure cut
+                    cut_energy = accumulate(energy_hits.begin(), energy_hits.end(), 0.0);
+
                 }
-                
+
+                // Build final TH2I image
                 TH2I final_image(Form("pic_run%d_ev%d", runCount, entry-start), "",
                                     x_pix, -0.5, x_pix -0.5,
                                     y_pix, -0.5, y_pix -0.5);
-                    
                 for(unsigned int xx =0; xx < array2d_Nph.size(); xx++) {
                     for(unsigned int yy =0; yy < array2d_Nph[0].size(); yy++) {
-                        
                         int binc = background[xx][yy]+(int)array2d_Nph[xx][yy];
                         final_image.SetBinContent(xx+1, yy+1, binc);
                     }
                 }
                 
-                //Cut again the hits to save the effective length and energy which is visible in the final image,
-                //and compute the number of photons post-cut
+                // Compute variables (after the cut) to be saved in the tree
                 if (config.getBool("exposure_time_effect")) {
-                    if (randcut<readout_time) {
-                        double y_cut_tmp = config.getDouble("y_dim") * (0.5 - randcut/readout_time);
-
-                        // Removing elements from x_hits_tr
-                        x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
-                            return y_hits_tr[&x-&*x_hits_tr.begin()] < y_cut_tmp;
-                        }), x_hits_tr.end());
-                        // Removing elements from z_hits_tr
-                        z_hits_tr.erase(std::remove_if(z_hits_tr.begin(), z_hits_tr.end(), [&](const double& z) {
-                            return y_hits_tr[&z-&*z_hits_tr.begin()] < y_cut_tmp;
-                            }), z_hits_tr.end());
-                        // Removing elements from energy_hits
-                        energy_hits.erase(std::remove_if(energy_hits.begin(), energy_hits.end(), [&](const double& e) {
-                            return y_hits_tr[&e-&*energy_hits.begin()] < y_cut_tmp;
-                        }), energy_hits.end());
-                        
-                        // Removing elements from y_hits_tr [must be done after the previous ones]
-                        y_hits_tr.erase(std::remove_if(y_hits_tr.begin(), y_hits_tr.end(),[&](const double& y) {
-                            return y < y_cut_tmp;
-                        }), y_hits_tr.end());
-                            
-                    } else if (randcut> config.getDouble("exposure_time") ) {
-                        double y_cut_tmp = config.getDouble("y_dim") * (0.5 - (randcut - config.getDouble("exposure_time")) / readout_time);
-
-                        // Removing elements from x_hits_tr
-                        x_hits_tr.erase(std::remove_if(x_hits_tr.begin(), x_hits_tr.end(), [&](const double& x) {
-                            return y_hits_tr[&x-&*x_hits_tr.begin()] > y_cut_tmp;
-                        }), x_hits_tr.end());
-                        // Removing elements from z_hits_tr
-                        z_hits_tr.erase(std::remove_if(z_hits_tr.begin(), z_hits_tr.end(), [&](const double& z) {
-                            return y_hits_tr[&z-&*z_hits_tr.begin()] > y_cut_tmp;
-                        }), z_hits_tr.end());
-                        // Removing elements from energy_hits
-                        energy_hits.erase(std::remove_if(energy_hits.begin(), energy_hits.end(), [&](const double& e) {
-                            return y_hits_tr[&e-&*energy_hits.begin()] > y_cut_tmp;
-                        }), energy_hits.end());
-                        
-                        // Removing elements from y_hits_tr [must be done after the previous ones]
-                        y_hits_tr.erase(std::remove_if(y_hits_tr.begin(), y_hits_tr.end(),[&](const double& y) {
-                            return y > y_cut_tmp;
-                        }), y_hits_tr.end());
-                        
-                    }
-                        
-                    cut_energy = accumulate(energy_hits.begin(), energy_hits.end(), 0.0);
-                    
-                    if(x_hits_tr.size()==0){
-                        cut_energy = 0;
-                        cout<<"The track was completely cut after smearing"<<endl;
-                            
-                        TH2I final_image_cut(Form("pic_run%d_ev%d", runCount, entry-start), "",
-                                             x_pix, -0.5, x_pix -0.5,
-                                             y_pix, -0.5, y_pix -0.5);
-                            
-                        for(unsigned int xx =0; xx < background.size(); xx++) {
-                            for(unsigned int yy =0; yy < background[0].size(); yy++) {
-                                final_image_cut.SetBinContent(xx+1, yy+1, background[xx][yy]);
-                            }
-                        }
-                        
-                        // Make sure nRedpix matches
-                        nRedpix = redpix_ix->size();
-                        
-                        outtree->Fill();
-                        outfile->cd();
-                        if(!config.getBool("redpix_output")) {
-                            final_image_cut.Write();
-                        }
-                        
-                            
-                        continue;
-                    }
-                        
+                    proj_track_2D_cut = processTrack.GetTrackVariable("proj_track_2D", x_hits_tr, y_hits_tr, z_hits_tr);
+                    x_min_cut = processTrack.GetTrackVariable("x_min", x_hits_tr, y_hits_tr, z_hits_tr);
+                    x_max_cut = processTrack.GetTrackVariable("x_max", x_hits_tr, y_hits_tr, z_hits_tr);
+                    y_min_cut = processTrack.GetTrackVariable("y_min", x_hits_tr, y_hits_tr, z_hits_tr);
+                    y_max_cut = processTrack.GetTrackVariable("y_max", x_hits_tr, y_hits_tr, z_hits_tr);
+                    z_min_cut = processTrack.GetTrackVariable("z_min", x_hits_tr, y_hits_tr, z_hits_tr);
+                    z_max_cut = processTrack.GetTrackVariable("z_max", x_hits_tr, y_hits_tr, z_hits_tr);
                 }
-                
-                
-                // Compute variables to be saved in the tree
-                proj_track_2D_cut = 0;
-                for(int ihit=0; ihit < numhits-1; ihit++){
-                    proj_track_2D_cut += sqrt((x_hits_tr[ihit+1]-x_hits_tr[ihit])*(x_hits_tr[ihit+1]-x_hits_tr[ihit])+
-                                                (y_hits_tr[ihit+1]-y_hits_tr[ihit])*(y_hits_tr[ihit+1]-y_hits_tr[ihit])
-                                                );
-                }
-                // DEBUG
-                //cout<<"proj_track_2D_cut = "<<Form("%.10f", proj_track_2D_cut)<<endl;
-            
-            
-                x_min_cut = (*min_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * config.getDouble("x_dim")) * static_cast<double>(x_pix) / config.getDouble("x_dim");
-                x_max_cut = (*max_element(x_hits_tr.begin(), x_hits_tr.end()) + 0.5 * config.getDouble("x_dim")) * static_cast<double>(x_pix) / config.getDouble("x_dim");
-                y_min_cut = (*min_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * config.getDouble("y_dim")) * static_cast<double>(y_pix) / config.getDouble("y_dim");
-                y_max_cut = (*max_element(y_hits_tr.begin(), y_hits_tr.end()) + 0.5 * config.getDouble("y_dim")) * static_cast<double>(y_pix) / config.getDouble("y_dim");
-                z_min_cut = min((*max_element(z_hits_tr.begin(),
-                                                    z_hits_tr.end()) + config.getDouble("z_extra")),
-                                (*min_element(z_hits_tr.begin(),
-                                                    z_hits_tr.end()) + config.getDouble("z_extra")));
-                z_max_cut = max((*max_element(z_hits_tr.begin(),
-                                                    z_hits_tr.end()) + config.getDouble("z_extra")),
-                                (*min_element(z_hits_tr.begin(),
-                                                    z_hits_tr.end()) + config.getDouble("z_extra")));
                 //DEBUG
+                //cout<<"proj_track_2D_cut = "<<Form("%.10f", proj_track_2D_cut)<<endl;
                 //cout<<" x_min_cut = "<<x_min_cut<<" x_max_cut = "<<x_max_cut<<" y_min_cut = "<<y_minv<<" y_max_cut = "<<y_max_cut<<" z_min_cut = "<<z_min_cut<<" z_max_cut = "<<z_max_cut<<endl;
-            
-            
+
                 // if there are at least 2 hits compute theta and phi
                 if(x_hits_tr.size() > 1) {
                     phi   = atan2( y_hits_tr[1] - y_hits_tr[0],
@@ -1209,9 +1078,9 @@ void DigitizationRunner::processRootFiles() {
                     pz              = (*pz_particle)[0];
                 }
             
-                auto tb = std::chrono::steady_clock::now();
-                std::chrono::duration<double> durtmp=tb-ta;
-                cout << "Time taken in seconds to compute_cmos_with_saturation is: " << durtmp.count() << endl;
+                auto tc = std::chrono::steady_clock::now();
+                std::chrono::duration<double> durtmpc=tc-ta;
+                cout << "Total time taken in seconds to digitize track is: " << durtmpc.count() << endl;
                     
                 // Make sure nRedpix matches
                 nRedpix = redpix_ix->size();
@@ -1240,4 +1109,83 @@ void DigitizationRunner::processRootFiles() {
         }
         f->Close();
     }
+}
+
+// ================================================================================================
+// ================================================================================================
+// ================================================================================================
+// ================================================================================================
+
+void DigitizationRunner::generateHistogramsFromDigi() {
+    const string infolder  = Utils::resolvePath(inputDir);
+    const string outfolder = Utils::resolvePath(outputDir);
+
+    //std::string inDir = ConfigManager::resolvePath(inputDir);
+    for (const auto& fentry : filesystem::directory_iterator(infolder)) {
+        const string filename = fentry.path().string();
+        if (!isValidDigiFile(filename)) continue;
+        int runNumber = extractDigiRunNumber(filename);
+        // Generate the output filename
+        string outfilename= Form("%s/histograms_Run%05d.root", outfolder.c_str(),runNumber);
+        cout << "Generating output filename: " << outfilename << " from input filename: "<< filename << std::endl;
+
+        // Copy the input file to the output file
+        filesystem::copy_file(filename, outfilename, filesystem::copy_options::overwrite_existing);
+        // DEBUG
+        // std::cout << "Copied " << filename << " -> " << outfilename << std::endl;
+
+        // Open the newly created file to add TH2I images
+        auto f         = shared_ptr<TFile> {TFile::Open(outfilename.c_str(), "UPDATE")};
+        auto inputtree = (TTree*)f->Get("event_info");
+
+        // Add pedestal run number
+        addPedsToParamDir(f);
+
+        // Setup redpix readout
+        vector<uint16_t> *redpix_ix = 0;
+        vector<uint16_t> *redpix_iy = 0;
+        vector<uint16_t> *redpix_iz = 0;
+        int nRedpix = -1;
+        inputtree->SetBranchAddress("redpix_ix", &redpix_ix);
+        inputtree->SetBranchAddress("redpix_iy", &redpix_iy);
+        inputtree->SetBranchAddress("redpix_iz", &redpix_iz);
+        inputtree->SetBranchAddress("nRedpix", &nRedpix);
+
+        // Loop over the events in the digi_RunXXXXX.root file
+        int MC_events = inputtree->GetEntries();
+        for(int entry = 0; entry < MC_events; entry ++) {
+            inputtree->GetEntry(entry);
+            cout<< "Producing picture for event "<<entry<<" out of "<< MC_events<<endl;
+
+            // Get random pedestal
+            vector<vector<int>> background(x_pix, vector<int>(y_pix, 0));
+
+            AddBckg(background);
+
+            // TH2I image creation
+            TH2I final_image(Form("pic_run%d_ev%d", runCount, entry), "",
+                             x_pix, -0.5, x_pix -0.5,
+                             y_pix, -0.5, y_pix -0.5);
+            for(int idx = 0; idx < nRedpix; idx++) {
+                int xx = static_cast<int>((*redpix_ix)[idx]);
+                int yy = static_cast<int>((*redpix_iy)[idx]);
+                int binc = static_cast<int>((*redpix_iz)[idx]);
+                final_image.SetBinContent(xx+1, yy+1, binc);
+            }
+
+            // Add pedestal to final image
+            for(int xx = 0; xx < x_pix; xx++) {
+                for(int yy = 0; yy < y_pix; yy++) {
+                    int flatbin = final_image.GetBin(xx + 1, yy + 1);
+                    final_image.AddBinContent(flatbin, background[xx][yy]);
+                }
+            }
+
+            f->cd();
+            final_image.Write();
+        }
+        f->Close();
+    }
+
+    return;
 }
