@@ -443,8 +443,8 @@ void DigitizationRunner::FillRedpix(const std::vector<std::vector<double>>& imag
             if (content != 0.0) {
                 // N.B. the repix definition of x and y in the reco is physical, so they
                 // must be swapped here
-                redpix_ix->push_back(static_cast<uint16_t>(iy));
-                redpix_iy->push_back(static_cast<uint16_t>(ix));
+                redpix_ix->push_back(static_cast<uint16_t>(ix));
+                redpix_iy->push_back(static_cast<uint16_t>(iy));
                 redpix_iz->push_back(static_cast<uint16_t>(content));
                 
             }
@@ -1167,8 +1167,8 @@ void DigitizationRunner::generateHistogramsFromDigi() {
                              x_pix, -0.5, x_pix -0.5,
                              y_pix, -0.5, y_pix -0.5);
             for(int idx = 0; idx < nRedpix; idx++) {
-                int xx = static_cast<int>((*redpix_iy)[idx]);
-                int yy = static_cast<int>((*redpix_ix)[idx]);
+                int xx = static_cast<int>((*redpix_ix)[idx]);
+                int yy = static_cast<int>((*redpix_iy)[idx]);
                 int binc = static_cast<int>((*redpix_iz)[idx]);
                 final_image.SetBinContent(xx+1, yy+1, binc);
             }
